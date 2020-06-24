@@ -25,7 +25,7 @@ receivers:
       local_mode: false
 ```
 
-The default configurations below reference the [default configurations](https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L99) of the existing X-Ray Daemon.
+The default configurations below are based on the [default configurations](https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L99) of the existing X-Ray Daemon.
 
 ### version
 The version of the configuration schema for this receiver.
