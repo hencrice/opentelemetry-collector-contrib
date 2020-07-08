@@ -75,9 +75,9 @@ func (f *Factory) CreateTraceReceiver(
 	ctx context.Context,
 	params component.ReceiverCreateParams,
 	cfg configmodels.Receiver,
-	nextConsumer consumer.TraceConsumer) (component.TraceReceiver, error) {
-	// TODO: Finish the implementation
-	return nil, configerror.ErrDataTypeIsNotSupported
+	consumer consumer.TraceConsumer) (component.TraceReceiver, error) {
+	rcfg := cfg.(*Config)
+	return newReceiver(rcfg, consumer, params.Logger)
 }
 
 // CreateMetricsReceiver merely returns an error because the X-Ray receiver does not
