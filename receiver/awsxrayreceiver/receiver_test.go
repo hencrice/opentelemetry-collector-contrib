@@ -16,10 +16,13 @@ package awsxrayreceiver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -91,6 +94,8 @@ func TestShutdownStopsPollers(t *testing.T) {
 	}, "poller is not stopped")
 }
 
+// TODO: Update this test to assert on the format of traces
+// once the transformation from X-Ray segments -> OTLP is done.
 func TestSegmentsPassedToConsumer(t *testing.T) {
 	addr, rcvr, _ := createAndOptionallyStartReceiver(t, true)
 	defer rcvr.Shutdown(context.Background())
@@ -119,7 +124,6 @@ func TestIssuesOccurredWhenSplitHeaderBody(t *testing.T) {
 	assert.NoError(t, err, "can not write packet in the no body test case")
 	testutils.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
-		fmt.Println(logs)
 		if len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message, "Missing header or segment") {
 			return true
 		}
@@ -149,7 +153,7 @@ func TestInvalidHeader(t *testing.T) {
 	}, "poller should reject segment")
 }
 
-func TestSocketReadTemporaryNetError(t *testing.T) {
+func TestSocketReadIrrecoverableNetError(t *testing.T) {
 	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, false)
 	// close the actual socket because we are going to mock it out below
 	rcvr.(*xrayReceiver).udpSock.Close()
@@ -157,7 +161,7 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 	randErrStr, _ := uuid.NewRandom()
 	rcvr.(*xrayReceiver).udpSock = &mockSocketConn{
 		expectedOutput: []byte("dontCare"),
-		expectedError: &mockTempNetError{
+		expectedError: &mockNetError{
 			mockErrStr: randErrStr.String(),
 		},
 	}
@@ -168,10 +172,44 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 	testutils.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
+		var errIrrecv *errIrrecoverable
 		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "X-Ray receiver read net error") &&
+			strings.Contains(lastEntry.Message, "irrecoverable socket read error. Exiting poller") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
-			strings.Compare(lastEntry.Context[0].Interface.(error).Error(), randErrStr.String()) == 0 {
+			errors.As(lastEntry.Context[0].Interface.(error), &errIrrecv) &&
+			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
+			return true
+		}
+		return false
+	}, "poller should exit due to irrecoverable net read error")
+}
+
+func TestSocketReadTemporaryNetError(t *testing.T) {
+	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, false)
+	// close the actual socket because we are going to mock it out below
+	rcvr.(*xrayReceiver).udpSock.Close()
+
+	randErrStr, _ := uuid.NewRandom()
+	rcvr.(*xrayReceiver).udpSock = &mockSocketConn{
+		expectedOutput: []byte("dontCare"),
+		expectedError: &mockNetError{
+			mockErrStr: randErrStr.String(),
+			temporary:  true,
+		},
+	}
+
+	err := rcvr.Start(context.Background(), componenttest.NewNopHost())
+	assert.NoError(t, err, "receiver with mock socket should be started")
+
+	testutils.WaitFor(t, func() bool {
+		logs := recordedLogs.All()
+		lastEntry := logs[len(logs)-1]
+		var errRecv *errRecoverable
+		if len(logs) > 0 &&
+			strings.Contains(lastEntry.Message, "recoverable socket read error") &&
+			lastEntry.Context[0].Type == zapcore.ErrorType &&
+			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
+			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
 			return true
 		}
 		return false
@@ -197,30 +235,33 @@ func TestSocketGenericReadError(t *testing.T) {
 	testutils.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
+		var errRecv *errRecoverable
 		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "X-Ray receiver socket read error") &&
+			strings.Contains(lastEntry.Message, "recoverable socket read error") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
-			strings.Compare(lastEntry.Context[0].Interface.(error).Error(), randErrStr.String()) == 0 {
+			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
+			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
 			return true
 		}
 		return false
 	}, "poller should encounter generic socket read error")
 }
 
-type mockTempNetError struct {
+type mockNetError struct {
 	mockErrStr string
+	temporary  bool
 }
 
-func (m *mockTempNetError) Error() string {
+func (m *mockNetError) Error() string {
 	return m.mockErrStr
 }
 
-func (m *mockTempNetError) Timeout() bool {
+func (m *mockNetError) Timeout() bool {
 	return false
 }
 
-func (m *mockTempNetError) Temporary() bool {
-	return true
+func (m *mockNetError) Temporary() bool {
+	return m.temporary
 }
 
 type mockGenericErr struct {
@@ -234,10 +275,20 @@ func (m *mockGenericErr) Error() string {
 type mockSocketConn struct {
 	expectedOutput []byte
 	expectedError  error
+	readCount      int
+	mu             sync.Mutex
 }
 
 func (m *mockSocketConn) Read(b []byte) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	copied := copy(b, m.expectedOutput)
+	if m.readCount > 0 {
+		// intentionally slow to prevent a busy loop during any unit tests
+		// that involve the poll() function
+		time.Sleep(5 * time.Second)
+	}
+	m.readCount++
 	return copied, m.expectedError
 }
 
