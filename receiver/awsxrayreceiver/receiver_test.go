@@ -29,6 +29,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configmodels"
+	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/observability/observabilitytest"
 	"go.opentelemetry.io/collector/testutils"
@@ -105,13 +106,13 @@ func TestShutdownStopsPollers(t *testing.T) {
 
 // TODO: Update this test to assert on the format of traces
 // once the transformation from X-Ray segments -> OTLP is done.
-func TestSegmentsPassedToConsumer(t *testing.T) {
+func TestSegmentsSuccessfullyPassedToConsumer(t *testing.T) {
 	doneFn := observabilitytest.SetupRecordedMetricsTest()
 	defer doneFn()
 
-	const receiverName = "TestSegmentsPassedToConsumer"
+	const receiverName = "TestSegmentsSuccessfullyPassedToConsumer"
 
-	addr, rcvr, _ := createAndOptionallyStartReceiver(t, receiverName, true)
+	addr, rcvr, _ := createAndOptionallyStartReceiver(t, receiverName, nil, true)
 	defer rcvr.Shutdown(context.Background())
 
 	// valid header with invalid body (for now this is ok because we haven't
@@ -135,13 +136,47 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 	assert.NoError(t, err, "when checking receiver received spans")
 }
 
+func TestSegmentsConsumerErrorsOut(t *testing.T) {
+	doneFn := observabilitytest.SetupRecordedMetricsTest()
+	defer doneFn()
+
+	const receiverName = "TestSegmentsConsumerErrorsOut"
+
+	addr, rcvr, _ := createAndOptionallyStartReceiver(t, receiverName, true)
+	defer rcvr.Shutdown(context.Background())
+
+	// valid header with invalid body (for now this is ok because we haven't
+	// implemented the X-Ray segment -> OT format conversion)
+	err := writePacket(t, addr, `{"format": "json", "version": 1}`+"\nBody")
+	assert.NoError(t, err, "can not write packet in the happy case")
+
+	sink := rcvr.(*xrayReceiver).consumer.(*exportertest.SinkTraceExporter)
+
+	testutils.WaitFor(t, func() bool {
+		got := sink.AllTraces()
+		if len(got) == 1 {
+			return true
+		}
+		return false
+	}, "consumer should eventually get the X-Ray span")
+
+	// TODO: Update the count of the received & dropped spans to the actual number
+	// For now this can't be done because we haven't parsed the `payload`
+	err = observabilitytest.CheckValueViewReceiverReceivedSpans(receiverName, 1)
+	assert.NoError(t, err, "when checking receiver received spans")
+
+	err = observabilitytest.CheckValueViewReceiverDroppedSpans(receiverName, 1)
+	assert.NoError(t, err, "when checking receiver dropped spans")
+
+}
+
 func TestIssuesOccurredWhenSplitHeaderBody(t *testing.T) {
 	doneFn := observabilitytest.SetupRecordedMetricsTest()
 	defer doneFn()
 
 	const receiverName = "TestIssuesOccurredWhenSplitHeaderBody"
 
-	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, true)
+	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, nil, true)
 	defer rcvr.Shutdown(context.Background())
 
 	err := writePacket(t, addr, "Header\n") // no body
@@ -164,7 +199,7 @@ func TestInvalidHeader(t *testing.T) {
 
 	const receiverName = "TestInvalidHeader"
 
-	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, true)
+	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, nil, true)
 	defer rcvr.Shutdown(context.Background())
 
 	randString, _ := uuid.NewRandom()
@@ -194,7 +229,9 @@ func TestSocketReadIrrecoverableNetError(t *testing.T) {
 
 	const receiverName = "TestSocketReadIrrecoverableNetError"
 
-	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, false)
+	// don't start the receiver because we are going to replace the
+	// UDP socket with a mock below
+	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, nil, false)
 	// close the actual socket because we are going to mock it out below
 	rcvr.(*xrayReceiver).udpSock.Close()
 
@@ -233,7 +270,7 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 
 	const receiverName = "TestSocketReadTemporaryNetError"
 
-	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, false)
+	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, nil, false)
 	// close the actual socket because we are going to mock it out below
 	rcvr.(*xrayReceiver).udpSock.Close()
 
@@ -273,7 +310,7 @@ func TestSocketGenericReadError(t *testing.T) {
 
 	const receiverName = "TestSocketGenericReadError"
 
-	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, false)
+	_, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, nil, false)
 	// close the actual socket because we are going to mock it out below
 	rcvr.(*xrayReceiver).udpSock.Close()
 
@@ -353,11 +390,21 @@ func (m *mockSocketConn) Read(b []byte) (int, error) {
 
 func (m *mockSocketConn) Close() {}
 
-func createAndOptionallyStartReceiver(t *testing.T, receiverName string, start bool) (string, component.TraceReceiver, *observer.ObservedLogs) {
+func createAndOptionallyStartReceiver(t *testing.T,
+	receiverName string,
+	csu consumer.TraceConsumer,
+	start bool) (string, component.TraceReceiver, *observer.ObservedLogs) {
+
 	addr, err := findAvailableAddress()
 	assert.NoError(t, err, "there should be address available")
 
-	sink := new(exportertest.SinkTraceExporter)
+	var sink consumer.TraceConsumer
+	if csu == nil {
+		sink = new(exportertest.SinkTraceExporter)
+	} else {
+		sink = csu
+	}
+
 	logger, recorded := logSetup()
 	rcvr, err := newReceiver(
 		&Config{
