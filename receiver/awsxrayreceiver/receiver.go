@@ -150,12 +150,12 @@ func (x *xrayReceiver) poll() {
 		bufPointer := &buffer
 		rlen, err := x.read(bufPointer)
 		if err != nil && errors.As(err, &errIrrecv) {
-			x.logger.Error("irrecoverable socket read error. Exiting poller",
+			x.logger.Error("Irrecoverable socket read error. Exiting poller",
 				zap.Error(err))
 			obsreport.EndTraceDataReceiveOp(ctx, typeStr, 0, err)
 			return
 		} else if errors.As(err, &errRecv) {
-			x.logger.Error("recoverable socket read error", zap.Error(err))
+			x.logger.Error("Recoverable socket read error", zap.Error(err))
 			obsreport.EndTraceDataReceiveOp(ctx, typeStr, 0, err)
 			continue
 		}
@@ -192,6 +192,7 @@ func (x *xrayReceiver) poll() {
 			// For now this can't be done because we haven't parsed the `payload`
 			// above
 			obsreport.EndTraceDataReceiveOp(ctx, typeStr, 1, err)
+			x.logger.Warn("Trace consumer errored out", zap.Error(err))
 			continue
 		}
 		// TODO: Update the count of the received spans to the actual number

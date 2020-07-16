@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/exporter/exportertest"
 	"go.opentelemetry.io/collector/observability/observabilitytest"
 	"go.opentelemetry.io/collector/testutils"
@@ -142,32 +143,31 @@ func TestSegmentsConsumerErrorsOut(t *testing.T) {
 
 	const receiverName = "TestSegmentsConsumerErrorsOut"
 
-	addr, rcvr, _ := createAndOptionallyStartReceiver(t, receiverName, true)
+	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName,
+		&mockConsumer{consumeErr: errors.New("can't consume traces")},
+		true)
 	defer rcvr.Shutdown(context.Background())
 
 	// valid header with invalid body (for now this is ok because we haven't
 	// implemented the X-Ray segment -> OT format conversion)
 	err := writePacket(t, addr, `{"format": "json", "version": 1}`+"\nBody")
-	assert.NoError(t, err, "can not write packet in the happy case")
-
-	sink := rcvr.(*xrayReceiver).consumer.(*exportertest.SinkTraceExporter)
+	assert.NoError(t, err, "can not write packet")
 
 	testutils.WaitFor(t, func() bool {
-		got := sink.AllTraces()
-		if len(got) == 1 {
+		logs := recordedLogs.All()
+		if len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message, "Trace consumer errored out") {
 			return true
 		}
 		return false
-	}, "consumer should eventually get the X-Ray span")
+	}, "poller should log warning because consumer errored out")
 
 	// TODO: Update the count of the received & dropped spans to the actual number
 	// For now this can't be done because we haven't parsed the `payload`
-	err = observabilitytest.CheckValueViewReceiverReceivedSpans(receiverName, 1)
+	err = observabilitytest.CheckValueViewReceiverReceivedSpans(receiverName, 0)
 	assert.NoError(t, err, "when checking receiver received spans")
 
 	err = observabilitytest.CheckValueViewReceiverDroppedSpans(receiverName, 1)
 	assert.NoError(t, err, "when checking receiver dropped spans")
-
 }
 
 func TestIssuesOccurredWhenSplitHeaderBody(t *testing.T) {
@@ -251,7 +251,7 @@ func TestSocketReadIrrecoverableNetError(t *testing.T) {
 		lastEntry := logs[len(logs)-1]
 		var errIrrecv *errIrrecoverable
 		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "irrecoverable socket read error. Exiting poller") &&
+			strings.Contains(lastEntry.Message, "Irrecoverable socket read error. Exiting poller") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errIrrecv) &&
 			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
@@ -291,7 +291,7 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 		lastEntry := logs[len(logs)-1]
 		var errRecv *errRecoverable
 		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "recoverable socket read error") &&
+			strings.Contains(lastEntry.Message, "Recoverable socket read error") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
 			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
@@ -330,7 +330,7 @@ func TestSocketGenericReadError(t *testing.T) {
 		lastEntry := logs[len(logs)-1]
 		var errRecv *errRecoverable
 		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "recoverable socket read error") &&
+			strings.Contains(lastEntry.Message, "Recoverable socket read error") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
 			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
@@ -341,6 +341,22 @@ func TestSocketGenericReadError(t *testing.T) {
 
 	err = observabilitytest.CheckValueViewReceiverReceivedSpans(receiverName, 0)
 	assert.NoError(t, err, "when checking receiver received spans")
+}
+
+type mockConsumer struct {
+	mu         sync.Mutex
+	consumeErr error
+	traces     pdata.Traces
+}
+
+func (m *mockConsumer) ConsumeTraces(ctx context.Context, td pdata.Traces) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.consumeErr != nil {
+		return m.consumeErr
+	}
+	m.traces = td
+	return nil
 }
 
 type mockNetError struct {
