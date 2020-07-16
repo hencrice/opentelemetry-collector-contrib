@@ -21,7 +21,6 @@ import (
 
 const (
 	typeStr = "aws_xray"
-	version = "1.0.0"
 )
 
 // Config defines the configurations for an AWS X-Ray receiver.
@@ -30,8 +29,6 @@ type Config struct {
 	// and port on which this receiver listens for X-Ray segment documents
 	// emitted by the X-Ray SDK.
 	configmodels.ReceiverSettings `mapstructure:",squash"`
-	// squash ensures fields are correctly decoded in embedded struct
-	// https://godoc.org/github.com/mitchellh/mapstructure#hdr-Embedded_Structs_and_Squashing
 
 	// ProxyServer defines configurations related to the local TCP proxy server.
 	ProxyServer *proxyServer `mapstructure:"proxy_server"`
