@@ -16,6 +16,7 @@ package tracesegment
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path"
 	"testing"
@@ -614,4 +615,50 @@ func TestTraceBodyOtherTopLevelFieldsUnmarshalled(t *testing.T) {
 		ParentID:    aws.String("defdfd9912dc5a56"),
 		Type:        aws.String("subsegment"),
 	}, actualSeg, "unmarshalled segment is different from the expected")
+}
+
+func TestTraceBodyCauseIsExceptionIdUnmarshalled(t *testing.T) {
+	content, err := ioutil.ReadFile(path.Join("../../", "testdata", "rawsegment", "minCauseIsExceptionId.txt"))
+	assert.NoError(t, err, "can not read raw segment")
+
+	splitBuf := make([][]byte, 2)
+	separator := []byte(util.ProtocolSeparator)
+	slices := util.SplitHeaderBody(zap.NewNop(), &content, &separator, &splitBuf)
+	assert.True(t, len(slices[1]) > 0, "body length is 0")
+
+	var actualSeg Segment
+	err = json.Unmarshal(slices[1], &actualSeg)
+	assert.NoError(t, err, "can not unmarshall body")
+
+	assert.Equal(t, Segment{
+		Name:      aws.String("CauseIsExceptionID"),
+		ID:        aws.String("5cc4a447f5d4d696"),
+		StartTime: aws.Float64(1595437651.680097),
+		EndTime:   aws.Float64(1595437652.197392),
+		TraceID:   aws.String("1-5f187253-6a106696d56b1f4ef9eba2ed"),
+		Fault:     aws.Bool(true),
+		Cause: &CauseData{
+			Type:        CauseTypeExceptionID,
+			ExceptionID: aws.String("abcdefghijklmnop"),
+		},
+	}, actualSeg, "unmarshalled segment is different from the expected")
+}
+
+func TestTraceBodyInvalidCauseUnmarshalled(t *testing.T) {
+	content, err := ioutil.ReadFile(path.Join("../../", "testdata", "rawsegment", "minCauseIsInvalid.txt"))
+	assert.NoError(t, err, "can not read raw segment")
+
+	splitBuf := make([][]byte, 2)
+	separator := []byte(util.ProtocolSeparator)
+	slices := util.SplitHeaderBody(zap.NewNop(), &content, &separator, &splitBuf)
+	assert.True(t, len(slices[1]) > 0, "body length is 0")
+
+	var actualSeg Segment
+	err = json.Unmarshal(slices[1], &actualSeg)
+	assert.EqualError(t, err,
+		fmt.Sprintf(
+			"the value assigned to the `cause` field does not appear to be a string: %v",
+			[]byte{'2', '0', '0'},
+		),
+		"invalid `cause` implies invalid segment, so unmarshalling should've failed")
 }

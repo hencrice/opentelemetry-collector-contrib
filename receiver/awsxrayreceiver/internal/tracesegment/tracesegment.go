@@ -16,6 +16,7 @@ package tracesegment
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -100,7 +101,12 @@ func (c *CauseData) UnmarshalJSON(data []byte) error {
 		c.Type = CauseTypeObject
 		return nil
 	}
-	var exceptionID = string(data)
+	rawStr := string(data)
+	if len(rawStr) > 0 && (rawStr[0] != '"' || rawStr[len(rawStr)-1] != '"') {
+		return fmt.Errorf("the value assigned to the `cause` field does not appear to be a string: %v", data)
+	}
+	exceptionID := rawStr[1 : len(rawStr)-1]
+
 	c.Type = CauseTypeExceptionID
 	c.ExceptionID = &exceptionID
 	return nil
