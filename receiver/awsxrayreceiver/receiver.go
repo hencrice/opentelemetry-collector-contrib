@@ -184,7 +184,7 @@ func (x *xrayReceiver) poll() {
 		}
 
 		header := slices[0]
-		// payload := slices[1]
+		payload := slices[1]
 		headerInfo := tracesegment.Header{}
 		json.Unmarshal(header, &headerInfo)
 
@@ -199,6 +199,14 @@ func (x *xrayReceiver) poll() {
 
 		// TODO: Transform payload to consumer.ConsumeTraceData. For now
 		// we are just dropping the ingested X-Ray segments.
+		var segment tracesegment.Segment
+		err = json.Unmarshal(payload, &segment)
+		if err != nil {
+			obsreport.EndTraceDataReceiveOp(ctx, typeStr, 1, err)
+			x.logger.Error("Segment unmarshalling failed", zap.Error(err))
+			continue
+		}
+
 		err = x.consumer.ConsumeTraces(ctx, pdata.NewTraces())
 		if err != nil {
 			// TODO: Update the count of the received spans to the actual number
