@@ -284,6 +284,277 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 						},
 					},
 				},
+				Namespace: aws.String("aws"),
+				HTTP: &HTTPData{
+					// Request: nil
+					Response: &ResponseData{
+						Status:        aws.Int(400),
+						ContentLength: aws.Int(145),
+					},
+				},
+				AWS: &AWSData{
+					// AccountID: nil
+					// ECS: nil
+					// ECS: nil
+					// ElasticBeanstalk: nil
+					// Tracing: nil
+					Operation: aws.String("DescribeTable"),
+					Region:    aws.String("us-west-2"),
+					RequestID: aws.String("END70G12L90RIJGETVF97FBV63VV4KQNSO5AEMVJF66Q9ASUAAJG"),
+					// TODO: A field `retries` was emitted but not documented
+					// in the data model nor AWS documentation.
+
+					// QueueURL: nil
+					TableName: aws.String("does_not_exist"),
+				},
+				Subsegments: []Segment{
+					{
+						Name:      aws.String("marshal"),
+						ID:        aws.String("5307016134c0e0f6"),
+						StartTime: aws.Float64(1595437651.685977),
+						// TraceID: nil
+						EndTime: aws.Float64(1595437651.6864),
+					},
+					{
+						Name:      aws.String("attempt"),
+						ID:        aws.String("54b05295d4b0460d"),
+						StartTime: aws.Float64(1595437651.686414),
+						// TraceID: nil
+						EndTime: aws.Float64(1595437652.1967459),
+						Fault:   aws.Bool(true),
+						Cause: &CauseData{
+							Type: CauseTypeObject,
+							// ExceptionID: nil
+							causeObject: causeObject{
+								WorkingDirectory: aws.String("/Users/yenlinc/workplace/yenlinc/opentelemetry-collector-contrib/receiver/awsxrayreceiver/testdata/rawsegment/sampleapp"),
+								// Paths: nil
+								Exceptions: []Exception{
+									{
+										ID:      aws.String("0d836b2133ae826c"),
+										Message: aws.String("ResourceNotFoundException: Requested resource not found: Table: does_not_exist not found"),
+										Type:    aws.String("dynamodb.ResourceNotFoundException"),
+										Remote:  aws.Bool(true),
+										// Truncated: nil
+										// Skipped: nil
+										// Cause: nil
+										Stack: []StackFrame{
+											{
+												Path:  aws.String("github.com/aws/aws-xray-sdk-go@v1.1.0/xray/aws.go"),
+												Line:  aws.Int(139),
+												Label: aws.String("glob..func7"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/aws/request/handlers.go"),
+												Line:  aws.Int(267),
+												Label: aws.String("(*HandlerList).Run"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/aws/request/request.go"),
+												Line:  aws.Int(534),
+												Label: aws.String("(*Request).Send"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/service/dynamodb/api.go"),
+												Line:  aws.Int(2275),
+												Label: aws.String("(*DynamoDB).DescribeTableWithContext"),
+											},
+											{
+												Path:  aws.String("sampleapp/sample.go"),
+												Line:  aws.Int(31),
+												Label: aws.String("ddbExpectedFailure.func1"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-xray-sdk-go@v1.1.0/xray/capture.go"),
+												Line:  aws.Int(45),
+												Label: aws.String("Capture"),
+											},
+											{
+												Path:  aws.String("sampleapp/sample.go"),
+												Line:  aws.Int(30),
+												Label: aws.String("ddbExpectedFailure"),
+											},
+											{
+												Path:  aws.String("sampleapp/sample.go"),
+												Line:  aws.Int(25),
+												Label: aws.String("main"),
+											},
+											{
+												Path:  aws.String("runtime/proc.go"),
+												Line:  aws.Int(203),
+												Label: aws.String("main"),
+											},
+											{
+												Path:  aws.String("runtime/asm_amd64.s"),
+												Line:  aws.Int(1373),
+												Label: aws.String("goexit"),
+											},
+										},
+									},
+								},
+							},
+						},
+						Subsegments: []Segment{
+							{
+								Name:      aws.String("connect"),
+								ID:        aws.String("b0a7749d2ba2936b"),
+								StartTime: aws.Float64(1595437651.6869912),
+								// TraceID: nil
+								EndTime: aws.Float64(1595437652.1090848),
+								Metadata: map[string]map[string]interface{}{
+									"http": map[string]interface{}{
+										"connection": map[string]bool{
+											"reused":   false,
+											"was_idle": false,
+										},
+									},
+								},
+								Subsegments: []Segment{
+									{
+										Name:      aws.String("dns"),
+										ID:        aws.String("56604619618fb7a0"),
+										StartTime: aws.Float64(1595437651.688052),
+										// TraceID: nil
+										EndTime: aws.Float64(1595437651.73546),
+										Metadata: map[string]map[string]interface{}{
+											"http": map[string]interface{}{
+												"dns": map[string]interface{}{
+													"addresses": []map[string]string{
+														{
+															"IP":   "52.94.29.60",
+															"Zone": "",
+														},
+													},
+													"coalesced": false,
+												},
+											},
+										},
+									},
+									{
+										Name:      aws.String("dial"),
+										ID:        aws.String("32ad1e63ed192121"),
+										StartTime: aws.Float64(1595437651.735483),
+										// TraceID: nil
+										EndTime: aws.Float64(1595437651.795638),
+										Metadata: map[string]map[string]interface{}{
+											"http": map[string]interface{}{
+												"connect": map[string]string{
+													"network": "tcp",
+												},
+											},
+										},
+									},
+									{
+										Name:      aws.String("tls"),
+										ID:        aws.String("e7f66f0cac6898da"),
+										StartTime: aws.Float64(1595437651.7975092),
+										// TraceID: nil
+										EndTime: aws.Float64(1595437652.1090329),
+										Metadata: map[string]map[string]interface{}{
+											"http": map[string]interface{}{
+												"tls": map[string]interface{}{
+													"cipher_suite":                  49199,
+													"did_resume":                    false,
+													"negotiated_protocol":           "http/1.1",
+													"negotiated_protocol_is_mutual": true,
+												},
+											},
+										},
+									},
+								},
+							},
+							{
+								Name:      aws.String("request"),
+								ID:        aws.String("557398c25231fe20"),
+								StartTime: aws.Float64(1595437652.1091032),
+								// TraceID: nil
+								EndTime: aws.Float64(1595437652.1093729),
+							},
+							{
+								Name:      aws.String("response"),
+								ID:        aws.String("259dfdf07a42fb84"),
+								StartTime: aws.Float64(1595437652.109379),
+								// TraceID: nil
+								EndTime: aws.Float64(1595437652.1958442),
+							},
+						},
+					},
+					{
+						Name:      aws.String("wait"),
+						ID:        aws.String("7b9f8e1c4e6b9307"),
+						StartTime: aws.Float64(1595437652.197242),
+						// TraceID: nil
+						EndTime: aws.Float64(1595437652.1972501),
+						Fault:   aws.Bool(true),
+						Cause: &CauseData{
+							Type: CauseTypeObject,
+							// ExceptionID: nil
+							causeObject: causeObject{
+								WorkingDirectory: aws.String("/Users/yenlinc/workplace/yenlinc/opentelemetry-collector-contrib/receiver/awsxrayreceiver/testdata/rawsegment/sampleapp"),
+								// Paths: nil
+								Exceptions: []Exception{
+									{
+										ID:      aws.String("c69a61b725cb8d57"),
+										Message: aws.String("ResourceNotFoundException: Requested resource not found: Table: does_not_exist not found"),
+										Type:    aws.String("dynamodb.ResourceNotFoundException"),
+										Remote:  aws.Bool(true),
+										Stack: []StackFrame{
+											{
+												Path:  aws.String("github.com/aws/aws-xray-sdk-go@v1.1.0/xray/aws.go"),
+												Line:  aws.Int(149),
+												Label: aws.String("glob..func8"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/aws/request/handlers.go"),
+												Line:  aws.Int(267),
+												Label: aws.String("(*HandlerList).Run"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/aws/request/request.go"),
+												Line:  aws.Int(535),
+												Label: aws.String("(*Request).Send"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/service/dynamodb/api.go"),
+												Line:  aws.Int(2275),
+												Label: aws.String("(*DynamoDB).DescribeTableWithContext"),
+											},
+											{
+												Path:  aws.String("sampleapp/sample.go"),
+												Line:  aws.Int(31),
+												Label: aws.String("ddbExpectedFailure.func1"),
+											},
+											{
+												Path:  aws.String("github.com/aws/aws-xray-sdk-go@v1.1.0/xray/capture.go"),
+												Line:  aws.Int(45),
+												Label: aws.String("Capture"),
+											},
+											{
+												Path:  aws.String("sampleapp/sample.go"),
+												Line:  aws.Int(30),
+												Label: aws.String("ddbExpectedFailure"),
+											},
+											{
+												Path:  aws.String("sampleapp/sample.go"),
+												Line:  aws.Int(25),
+												Label: aws.String("main"),
+											},
+											{
+												Path:  aws.String("runtime/proc.go"),
+												Line:  aws.Int(203),
+												Label: aws.String("main"),
+											},
+											{
+												Path:  aws.String("runtime/asm_amd64.s"),
+												Line:  aws.Int(1373),
+												Label: aws.String("goexit"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	},

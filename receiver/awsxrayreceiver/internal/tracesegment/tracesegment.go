@@ -74,8 +74,8 @@ type Segment struct {
 	Service      *ServiceData                      `json:"service,omitempty"`
 	PrecursorIDs []string                          `json:"precursor_ids,omitempty"`
 
-	Namespace string `json:"namespace,omitempty"`
-	Traced    *bool  `json:"traced,omitempty"`
+	Namespace *string `json:"namespace,omitempty"`
+	Traced    *bool   `json:"traced,omitempty"`
 }
 
 // CauseData is the container that contains the `cause` field
