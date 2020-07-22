@@ -1,4 +1,4 @@
-This folder contains raw X-Ray segment documents generated from sample application instrumented with the Go X-Ray SDK. The sample app assumes there's no DynamoDB table with the name, "does_not_exist", in the us-west-2 region. You can build the sample app using:
+This folder contains raw X-Ray segment documents. The `ddbResourceNotFoundError.txt` was generated from the sample application instrumented with the Go X-Ray SDK while the rest were synthesized manually. The sample app assumes there's no DynamoDB table with the name, "does_not_exist", in the us-west-2 region. You can build the sample app using:
 ```
 go build -tags=xraysegmentdump sample.go
 ```
