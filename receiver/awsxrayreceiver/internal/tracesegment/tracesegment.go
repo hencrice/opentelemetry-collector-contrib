@@ -69,7 +69,7 @@ type Segment struct {
 	Type         *string                           `json:"type,omitempty"`
 	Subsegments  []Segment                         `json:"subsegments,omitempty"`
 	HTTP         *HTTPData                         `json:"http,omitempty"`
-	AWS          *AWSData                          `json:"aws,omitempty"`
+	AWS          map[string]interface{}            `json:"aws,omitempty"`
 	SQL          *SQLData                          `json:"sql,omitempty"`
 	Service      *ServiceData                      `json:"service,omitempty"`
 	PrecursorIDs []string                          `json:"precursor_ids,omitempty"`
@@ -149,25 +149,6 @@ type ResponseData struct {
 	ContentLength *int `json:"content_length,omitempty"`
 }
 
-// AWSData represents the downstream AWS resource that an application called.
-type AWSData struct {
-	// Available in both segment and subsegments
-	AccountID *string `json:"account_id,omitempty"`
-
-	// Available in segment
-	ECS              *ECSData              `json:"ecs,omitempty"`
-	EC2              *EC2Data              `json:"ec2,omitempty"`
-	ElasticBeanstalk *ElasticBeanstalkData `json:"elastic_beanstalk,omitempty"`
-	Tracing          *TracingData          `json:"tracing,omitempty"`
-
-	// Available in subsegments only
-	Operation *string `json:"operation,omitempty"`
-	Region    *string `json:"region,omitempty"`
-	RequestID *string `json:"request_id,omitempty"`
-	QueueURL  *string `json:"queue_url,omitempty"`
-	TableName *string `json:"table_name,omitempty"`
-}
-
 // ECSData provides the shape for unmarshalling the ecs field.
 type ECSData struct {
 	Container *string `json:"container,omitempty"`
@@ -191,6 +172,12 @@ type TracingData struct {
 	SDK *string `json:"sdk,omitempty"`
 }
 
+// XRayData provides the shape for unmarshalling the xray field
+type XRayData struct {
+	SDKVersion *string `json:"sdk_version,omitempty"`
+	SDK        *string `json:"sdk,omitempty"`
+}
+
 // SQLData provides the shape for unmarshalling the sql field.
 type SQLData struct {
 	ConnectionString *string `json:"connection_string,omitempty"`
@@ -205,5 +192,7 @@ type SQLData struct {
 
 // ServiceData provides the shape for unmarshalling the service field.
 type ServiceData struct {
-	Version *string `json:"version,omitempty"`
+	Version         *string `json:"version,omitempty"`
+	CompilerVersion *string `json:"compiler_version,omitempty"`
+	Compiler        *string `json:"compiler,omitempty"`
 }

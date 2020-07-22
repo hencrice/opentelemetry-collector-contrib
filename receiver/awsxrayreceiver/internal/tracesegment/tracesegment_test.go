@@ -152,7 +152,7 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 		Subsegments: []Segment{
 			{
 				Name:      aws.String("DDB.TableDoesNotExist.DescribeTable"),
-				ID:        aws.String("aef48bafb51c6326"),
+				ID:        aws.String("1be15bb9b8ddfb71"),
 				StartTime: aws.Float64(1595437651.683031),
 				// TraceID: nil
 				EndTime: aws.Float64(1595437652.197367),
@@ -187,7 +187,7 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 									{
 										Path:  aws.String("sampleapp/sample.go"),
 										Line:  aws.Int(25),
-										Label: aws.String("ddbExpectedFailure"),
+										Label: aws.String("main"),
 									},
 									{
 										Path:  aws.String("runtime/proc.go"),
@@ -292,20 +292,12 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 						ContentLength: aws.Int(145),
 					},
 				},
-				AWS: &AWSData{
-					// AccountID: nil
-					// ECS: nil
-					// ECS: nil
-					// ElasticBeanstalk: nil
-					// Tracing: nil
-					Operation: aws.String("DescribeTable"),
-					Region:    aws.String("us-west-2"),
-					RequestID: aws.String("END70G12L90RIJGETVF97FBV63VV4KQNSO5AEMVJF66Q9ASUAAJG"),
-					// TODO: A field `retries` was emitted but not documented
-					// in the data model nor AWS documentation.
-
-					// QueueURL: nil
-					TableName: aws.String("does_not_exist"),
+				AWS: map[string]interface{}{
+					"operation":  "DescribeTable",
+					"region":     "us-west-2",
+					"request_id": "END70G12L90RIJGETVF97FBV63VV4KQNSO5AEMVJF66Q9ASUAAJG",
+					"retries":    0.0,
+					"table_name": "does_not_exist",
 				},
 				Subsegments: []Segment{
 					{
@@ -402,7 +394,7 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 								EndTime: aws.Float64(1595437652.1090848),
 								Metadata: map[string]map[string]interface{}{
 									"http": map[string]interface{}{
-										"connection": map[string]bool{
+										"connection": map[string]interface{}{
 											"reused":   false,
 											"was_idle": false,
 										},
@@ -418,8 +410,8 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 										Metadata: map[string]map[string]interface{}{
 											"http": map[string]interface{}{
 												"dns": map[string]interface{}{
-													"addresses": []map[string]string{
-														{
+													"addresses": []interface{}{
+														map[string]interface{}{
 															"IP":   "52.94.29.60",
 															"Zone": "",
 														},
@@ -437,7 +429,7 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 										EndTime: aws.Float64(1595437651.795638),
 										Metadata: map[string]map[string]interface{}{
 											"http": map[string]interface{}{
-												"connect": map[string]string{
+												"connect": map[string]interface{}{
 													"network": "tcp",
 												},
 											},
@@ -452,7 +444,7 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 										Metadata: map[string]map[string]interface{}{
 											"http": map[string]interface{}{
 												"tls": map[string]interface{}{
-													"cipher_suite":                  49199,
+													"cipher_suite":                  49199.0,
 													"did_resume":                    false,
 													"negotiated_protocol":           "http/1.1",
 													"negotiated_protocol_is_mutual": true,
@@ -556,6 +548,17 @@ func TestTraceBodyCorrectlyUnmarshalled(t *testing.T) {
 					},
 				},
 			},
+		},
+		AWS: map[string]interface{}{
+			"xray": map[string]interface{}{
+				"sdk_version": "1.1.0",
+				"sdk":         "X-Ray for Go",
+			},
+		},
+		Service: &ServiceData{
+			// Version: nil
+			CompilerVersion: aws.String("go1.14.3"),
+			Compiler:        aws.String("gc"),
 		},
 	},
 		actualSeg, "unmarshalled segment is different from the expected")
