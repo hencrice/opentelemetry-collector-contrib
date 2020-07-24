@@ -29,5 +29,5 @@ type SocketConn interface {
 	Read(b []byte) (int, error)
 
 	// Closes the connection.
-	Close()
+	Close() error
 }
