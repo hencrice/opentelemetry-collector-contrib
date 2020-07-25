@@ -54,7 +54,7 @@ func TestSplitHeaderBodyWithSeparatorDoesNotExist(t *testing.T) {
 	var errRecv *recvErr.ErrRecoverable
 	assert.True(t, errors.As(err, &errRecv), "should return recoverable error")
 	assert.EqualError(t, err,
-		fmt.Sprintf("missing header, incoming bytes: %v", buf),
+		fmt.Sprintf("unable to split incoming data as header and segment, incoming bytes: %v", buf),
 		"expected error messages")
 }
 

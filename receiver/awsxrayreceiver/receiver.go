@@ -90,7 +90,7 @@ func (x *xrayReceiver) Start(ctx context.Context, host component.Host) error {
 	x.startOnce.Do(func() {
 		x.longLivedCtx = obsreport.ReceiverContext(ctx, x.instanceName, udppoller.Transport, "")
 		x.poller.Start(x.longLivedCtx)
-		x.start()
+		go x.start()
 		err = nil
 	})
 	return err

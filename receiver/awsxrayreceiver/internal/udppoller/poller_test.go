@@ -96,19 +96,18 @@ func TestCloseStopsPoller(t *testing.T) {
 	assert.Error(t, err, "a socket should not be closed twice")
 }
 
-func TestIssuesOccurredWhenSplitHeaderBody(t *testing.T) {
+func TestIncompletePacketNoSeparator(t *testing.T) {
 	addr, p, recordedLogs := createAndOptionallyStartPoller(t, true)
 	defer p.Close()
 
-	rawData := []byte("Header\n") // no body
+	rawData := []byte(`{"format": "json", "version": 1}`) // no body
 	err := writePacket(t, addr, string(rawData))
 	assert.NoError(t, err, "can not write packet in the no body test case")
 	testutil.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
 		var errRecv *internalErr.ErrRecoverable
-		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "Failed to split segment header and body") &&
+		if strings.Contains(lastEntry.Message, "Failed to split segment header and body") &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
 			strings.Compare(
 				errors.Unwrap(
@@ -120,14 +119,38 @@ func TestIssuesOccurredWhenSplitHeaderBody(t *testing.T) {
 	}, "poller should reject segment")
 }
 
-func TestInvalidHeader(t *testing.T) {
+func TestNonJsonHeader(t *testing.T) {
+	addr, p, recordedLogs := createAndOptionallyStartPoller(t, true)
+	defer p.Close()
+
+	randString, _ := uuid.NewRandom()
+	// the header (i.e. the portion before \n) is invalid
+	err := writePacket(t, addr, randString.String()+"\nBody")
+	assert.NoError(t, err, "can not write packet in the invalid header test case")
+	testutil.WaitFor(t, func() bool {
+		var errRecv *internalErr.ErrRecoverable
+		logs := recordedLogs.All()
+		lastEntry := logs[len(logs)-1]
+		if lastEntry.Message == "Failed to split segment header and body" &&
+			// assert the invalid header is equal to the random string we passed
+			// in previously as the invalid header.
+			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
+			strings.Contains(lastEntry.Context[0].Interface.(error).Error(),
+				fmt.Sprintf("invalid character '%s'", randString.String()[:1])) {
+			return true
+		}
+		return false
+	}, "poller should reject segment")
+}
+
+func TestJsonInvalidHeader(t *testing.T) {
 	addr, p, recordedLogs := createAndOptionallyStartPoller(t, true)
 	defer p.Close()
 
 	randString, _ := uuid.NewRandom()
 	// the header (i.e. the portion before \n) is invalid
 	err := writePacket(t, addr,
-		fmt.Sprintf(`{"format": "%s", version: 1}`, randString.String())+"\nBody")
+		fmt.Sprintf(`{"format": "%s", "version": 1}`, randString.String())+"\nBody")
 	assert.NoError(t, err, "can not write packet in the invalid header test case")
 	testutil.WaitFor(t, func() bool {
 		var errRecv *internalErr.ErrRecoverable
