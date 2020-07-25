@@ -46,6 +46,18 @@ func TestNonUDPTransport(t *testing.T) {
 		"X-Ray receiver only supports ingesting spans through UDP, provided: tcp")
 }
 
+func TestInvalidEndpoint(t *testing.T) {
+	_, err := New(
+		&Config{
+			Endpoint:           "invalidAddr",
+			Transport:          "udp",
+			NumOfPollerToStart: 2,
+		},
+		zap.NewNop(),
+	)
+	assert.EqualError(t, err, "address invalidAddr: missing port in address")
+}
+
 func TestUDPPortUnavailable(t *testing.T) {
 	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
 	assert.NoError(t, err, "should resolve UDP address")
