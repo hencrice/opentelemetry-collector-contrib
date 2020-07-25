@@ -54,8 +54,23 @@ func TestConsumerCantBeNil(t *testing.T) {
 		nil,
 		zap.NewNop(),
 	)
-	assert.Error(t, err, "should have failed to create a new receiver")
 	assert.True(t, errors.Is(err, componenterror.ErrNilNextConsumer), "consumer is nil should be detected")
+}
+
+func TestPollerCreationFailed(t *testing.T) {
+	_, err := newReceiver(
+		&Config{
+			NetAddr: confignet.NetAddr{
+				Endpoint:  "dontCare",
+				Transport: "tcp",
+			},
+		},
+		new(exportertest.SinkTraceExporter),
+		zap.NewNop(),
+	)
+	assert.EqualError(t, err,
+		"X-Ray receiver only supports ingesting spans through UDP, provided: tcp",
+		"receiver should not be created")
 }
 
 func TestCantStartAnInstanceTwice(t *testing.T) {
