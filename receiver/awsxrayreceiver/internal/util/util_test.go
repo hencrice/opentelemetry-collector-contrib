@@ -66,3 +66,42 @@ func TestSplitHeaderBodyNilBuf(t *testing.T) {
 	assert.EqualError(t, err, "buffer to split is nil",
 		"expected error messages")
 }
+
+func TestSplitHeaderBodyNonJsonHeader(t *testing.T) {
+	buf := []byte(`nonJson` + "\nBody")
+
+	_, _, err := SplitHeaderBody(buf)
+
+	var errRecv *recvErr.ErrRecoverable
+	assert.True(t, errors.As(err, &errRecv), "should return recoverable error")
+	assert.Contains(t, err.Error(), "invalid character 'o'")
+}
+
+func TestSplitHeaderBodyEmptyBody(t *testing.T) {
+	buf := []byte(`{"format":"json", "version":1}` + "\n")
+
+	header, body, err := SplitHeaderBody(buf)
+	assert.NoError(t, err, "should split correctly")
+
+	assert.Equal(t, &tracesegment.Header{
+		Format:  "json",
+		Version: 1,
+	}, header, "actual header is different from the expected")
+	assert.Len(t, body, 0, "body should be empty")
+}
+
+func TestSplitHeaderBodyInvalidJsonHeader(t *testing.T) {
+	buf := []byte(`{"format":"json", "version":20}` + "\n")
+
+	_, _, err := SplitHeaderBody(buf)
+	assert.Error(t, err, "should fail because version is invalid")
+
+	var errRecv *recvErr.ErrRecoverable
+	assert.True(t, errors.As(err, &errRecv), "should return recoverable error")
+	assert.Contains(t, err.Error(),
+		fmt.Sprintf("invalid header %+v", tracesegment.Header{
+			Format:  "json",
+			Version: 20,
+		}),
+	)
+}

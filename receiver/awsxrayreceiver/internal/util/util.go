@@ -65,7 +65,7 @@ func SplitHeaderBody(buf []byte) (*tracesegment.Header, []byte, error) {
 			&recvErr.ErrRecoverable{err})
 	} else if !header.IsValid() {
 		return nil, nil, &recvErr.ErrRecoverable{
-			fmt.Errorf("invalid header %v", header),
+			fmt.Errorf("invalid header %+v", header),
 		}
 	}
 	return &header, bodyBytes, nil
