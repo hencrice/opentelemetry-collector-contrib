@@ -52,7 +52,7 @@ func SplitHeaderBody(buf []byte) (*tracesegment.Header, []byte, error) {
 	loc := bytes.IndexByte(buf, byte(ProtocolSeparator))
 	if loc == -1 {
 		return nil, nil, &recvErr.ErrRecoverable{
-			fmt.Errorf("missing header, incoming bytes: %v", buf),
+			fmt.Errorf("unable to split incoming data as header and segment, incoming bytes: %v", buf),
 		}
 	}
 	headerBytes = buf[0:loc]

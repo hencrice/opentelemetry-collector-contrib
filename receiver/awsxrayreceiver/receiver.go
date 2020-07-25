@@ -63,7 +63,12 @@ func newReceiver(config *Config,
 		return nil, componenterror.ErrNilNextConsumer
 	}
 
-	poller, err := udppoller.New(config.Transport)
+	poller, err := udppoller.New(&udppoller.Config{
+		ReceiverInstanceName: config.Name(),
+		Transport:            config.Transport,
+		Endpoint:             config.Endpoint,
+		NumOfPollerToStart:   maxPollerCount,
+	}, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -103,9 +108,9 @@ func (x *xrayReceiver) start() {
 	incomingSegments := x.poller.SegmentsChan()
 	for {
 		select {
-		case _, closed := <-incomingSegments:
+		case _, open := <-incomingSegments:
 			// poller was stopped
-			if closed {
+			if !open {
 				return
 			}
 			// TODO: Transform an incoming segment to consumer.ConsumeTraceData. For now
