@@ -96,11 +96,33 @@ func TestCloseStopsPoller(t *testing.T) {
 	assert.Error(t, err, "a socket should not be closed twice")
 }
 
+func TestSuccessfullyPollPacket(t *testing.T) {
+	addr, p, _ := createAndOptionallyStartPoller(t, true)
+	defer p.Close()
+
+	randString, _ := uuid.NewRandom()
+	rawData := []byte(`{"format": "json", "version": 1}` + "\n" + randString.String())
+	err := writePacket(t, addr, string(rawData))
+	assert.NoError(t, err, "can not write packet in the no body test case")
+
+	testutil.WaitFor(t, func() bool {
+		select {
+		case seg, open := <-p.(*poller).segChan:
+			assert.True(t, open, "segChan should not be closed")
+			assert.Equal(t, randString.String(), string(seg.Payload))
+			return true
+		default:
+			return false
+		}
+		return false
+	}, "poller should return parsed segment")
+}
+
 func TestIncompletePacketNoSeparator(t *testing.T) {
 	addr, p, recordedLogs := createAndOptionallyStartPoller(t, true)
 	defer p.Close()
 
-	rawData := []byte(`{"format": "json", "version": 1}`) // no body
+	rawData := []byte(`{"format": "json", "version": 1}`) // no separator
 	err := writePacket(t, addr, string(rawData))
 	assert.NoError(t, err, "can not write packet in the no body test case")
 	testutil.WaitFor(t, func() bool {
@@ -119,24 +141,43 @@ func TestIncompletePacketNoSeparator(t *testing.T) {
 	}, "poller should reject segment")
 }
 
+func TestIncompletePacketNoBody(t *testing.T) {
+	addr, p, recordedLogs := createAndOptionallyStartPoller(t, true)
+	defer p.Close()
+
+	rawData := []byte(`{"format": "json", "version": 1}` + "\n") // no body
+	err := writePacket(t, addr, string(rawData))
+	assert.NoError(t, err, "can not write packet in the no body test case")
+	testutil.WaitFor(t, func() bool {
+		logs := recordedLogs.All()
+		lastEntry := logs[len(logs)-1]
+		if strings.Contains(lastEntry.Message, "Missing body") &&
+			lastEntry.Context[0].String == "json" &&
+			lastEntry.Context[1].Integer == 1 {
+			return true
+		}
+		return false
+	}, "poller should log missing body")
+}
+
 func TestNonJsonHeader(t *testing.T) {
 	addr, p, recordedLogs := createAndOptionallyStartPoller(t, true)
 	defer p.Close()
 
-	randString, _ := uuid.NewRandom()
 	// the header (i.e. the portion before \n) is invalid
-	err := writePacket(t, addr, randString.String()+"\nBody")
+	err := writePacket(t, addr, "nonJson\nBody")
 	assert.NoError(t, err, "can not write packet in the invalid header test case")
 	testutil.WaitFor(t, func() bool {
 		var errRecv *internalErr.ErrRecoverable
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
+
 		if lastEntry.Message == "Failed to split segment header and body" &&
 			// assert the invalid header is equal to the random string we passed
 			// in previously as the invalid header.
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
 			strings.Contains(lastEntry.Context[0].Interface.(error).Error(),
-				fmt.Sprintf("invalid character '%s'", randString.String()[:1])) {
+				"invalid character 'o'") {
 			return true
 		}
 		return false
