@@ -192,7 +192,8 @@ func (p *poller) poll() {
 					zap.Error(err))
 				continue
 			}
-			// For now util.SplitHeaderBody does not return irrecoverable error so we don
+			// For now util.SplitHeaderBody does not return irrecoverable error
+			// so we don't check for it
 
 			if len(body) == 0 {
 				p.logger.Warn("Missing body",

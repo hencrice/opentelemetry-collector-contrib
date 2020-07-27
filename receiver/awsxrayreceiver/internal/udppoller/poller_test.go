@@ -32,6 +32,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	internalErr "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/errors"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
 func TestNonUDPTransport(t *testing.T) {
@@ -101,8 +102,14 @@ func TestCloseStopsPoller(t *testing.T) {
 	err = p.Close()
 	assert.NoError(t, err, "should be able to close the poller")
 
-	_, open := <-segChan
-	assert.False(t, open, "output channel should be closed")
+	testutil.WaitFor(t, func() bool {
+		select {
+		case _, open := <-segChan:
+			return !open
+		default:
+			return false
+		}
+	}, "output channel should be closed")
 
 	err = p.(*poller).udpSock.Close()
 	assert.Error(t, err, "a socket should not be closed twice")
@@ -115,18 +122,15 @@ func TestSuccessfullyPollPacket(t *testing.T) {
 	randString, _ := uuid.NewRandom()
 	rawData := []byte(`{"format": "json", "version": 1}` + "\n" + randString.String())
 	err := writePacket(t, addr, string(rawData))
-	assert.NoError(t, err, "can not write packet in the no body test case")
+	assert.NoError(t, err, "can not write packet in the TestSuccessfullyPollPacket case")
 
 	testutil.WaitFor(t, func() bool {
 		select {
 		case seg, open := <-p.(*poller).segChan:
-			assert.True(t, open, "segChan should not be closed")
-			assert.Equal(t, randString.String(), string(seg.Payload))
-			return true
+			return open && randString.String() == string(seg.Payload)
 		default:
 			return false
 		}
-		return false
 	}, "poller should return parsed segment")
 }
 
@@ -136,20 +140,18 @@ func TestIncompletePacketNoSeparator(t *testing.T) {
 
 	rawData := []byte(`{"format": "json", "version": 1}`) // no separator
 	err := writePacket(t, addr, string(rawData))
-	assert.NoError(t, err, "can not write packet in the no body test case")
+	assert.NoError(t, err, "can not write packet in the TestIncompletePacketNoSeparator case")
 	testutil.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
 		var errRecv *internalErr.ErrRecoverable
-		if strings.Contains(lastEntry.Message, "Failed to split segment header and body") &&
+
+		return strings.Contains(lastEntry.Message, "Failed to split segment header and body") &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
 			strings.Compare(
 				errors.Unwrap(
 					lastEntry.Context[0].Interface.(error)).Error(),
-				fmt.Sprintf("unable to split incoming data as header and segment, incoming bytes: %v", rawData)) == 0 {
-			return true
-		}
-		return false
+				fmt.Sprintf("unable to split incoming data as header and segment, incoming bytes: %v", rawData)) == 0
 	}, "poller should reject segment")
 }
 
@@ -159,16 +161,13 @@ func TestIncompletePacketNoBody(t *testing.T) {
 
 	rawData := []byte(`{"format": "json", "version": 1}` + "\n") // no body
 	err := writePacket(t, addr, string(rawData))
-	assert.NoError(t, err, "can not write packet in the no body test case")
+	assert.NoError(t, err, "can not write packet in the TestIncompletePacketNoBody case")
 	testutil.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
-		if strings.Contains(lastEntry.Message, "Missing body") &&
+		return strings.Contains(lastEntry.Message, "Missing body") &&
 			lastEntry.Context[0].String == "json" &&
-			lastEntry.Context[1].Integer == 1 {
-			return true
-		}
-		return false
+			lastEntry.Context[1].Integer == 1
 	}, "poller should log missing body")
 }
 
@@ -178,21 +177,18 @@ func TestNonJsonHeader(t *testing.T) {
 
 	// the header (i.e. the portion before \n) is invalid
 	err := writePacket(t, addr, "nonJson\nBody")
-	assert.NoError(t, err, "can not write packet in the invalid header test case")
+	assert.NoError(t, err, "can not write packet in the TestNonJsonHeader case")
 	testutil.WaitFor(t, func() bool {
 		var errRecv *internalErr.ErrRecoverable
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
 
-		if lastEntry.Message == "Failed to split segment header and body" &&
+		return lastEntry.Message == "Failed to split segment header and body" &&
 			// assert the invalid header is equal to the random string we passed
 			// in previously as the invalid header.
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
 			strings.Contains(lastEntry.Context[0].Interface.(error).Error(),
-				"invalid character 'o'") {
-			return true
-		}
-		return false
+				"invalid character 'o'")
 	}, "poller should reject segment")
 }
 
@@ -204,19 +200,22 @@ func TestJsonInvalidHeader(t *testing.T) {
 	// the header (i.e. the portion before \n) is invalid
 	err := writePacket(t, addr,
 		fmt.Sprintf(`{"format": "%s", "version": 1}`, randString.String())+"\nBody")
-	assert.NoError(t, err, "can not write packet in the invalid header test case")
+	assert.NoError(t, err, "can not write packet in the TestJsonInvalidHeader case")
 	testutil.WaitFor(t, func() bool {
 		var errRecv *internalErr.ErrRecoverable
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
-		if lastEntry.Message == "Failed to split segment header and body" &&
+		return lastEntry.Message == "Failed to split segment header and body" &&
 			// assert the invalid header is equal to the random string we passed
 			// in previously as the invalid header.
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
-			strings.Contains(lastEntry.Context[0].Interface.(error).Error(), randString.String()) {
-			return true
-		}
-		return false
+			errors.Unwrap(
+				lastEntry.Context[0].Interface.(error)).Error() == fmt.Sprintf(
+				"invalid header %+v", tracesegment.Header{
+					Format:  randString.String(),
+					Version: 1,
+				},
+			)
 	}, "poller should reject segment")
 }
 
@@ -225,6 +224,7 @@ func TestSocketReadIrrecoverableNetError(t *testing.T) {
 	// close the actual socket because we are going to mock it out below
 	p.(*poller).udpSock.Close()
 
+	// replace actual socket with the mock
 	randErrStr, _ := uuid.NewRandom()
 	p.(*poller).udpSock = &mockSocketConn{
 		expectedOutput: []byte("dontCare"),
@@ -239,13 +239,10 @@ func TestSocketReadIrrecoverableNetError(t *testing.T) {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
 		var errIrrecv *internalErr.ErrIrrecoverable
-		if strings.Contains(lastEntry.Message, "irrecoverable socket read error. Exiting poller") &&
+		return strings.Contains(lastEntry.Message, "irrecoverable socket read error. Exiting poller") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errIrrecv) &&
-			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
-			return true
-		}
-		return false
+			errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error() == randErrStr.String()
 	}, "poller should exit due to irrecoverable net read error")
 }
 
@@ -254,6 +251,7 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 	// close the actual socket because we are going to mock it out below
 	p.(*poller).udpSock.Close()
 
+	// again replace the socket with a mock
 	randErrStr, _ := uuid.NewRandom()
 	p.(*poller).udpSock = &mockSocketConn{
 		expectedOutput: []byte("dontCare"),
@@ -269,14 +267,10 @@ func TestSocketReadTemporaryNetError(t *testing.T) {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
 		var errRecv *internalErr.ErrRecoverable
-		if len(logs) > 0 &&
-			strings.Contains(lastEntry.Message, "recoverable socket read error") &&
+		return strings.Contains(lastEntry.Message, "recoverable socket read error") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
-			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
-			return true
-		}
-		return false
+			errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error() == randErrStr.String()
 	}, "poller should encounter net read error")
 }
 
@@ -299,13 +293,10 @@ func TestSocketGenericReadError(t *testing.T) {
 		logs := recordedLogs.All()
 		lastEntry := logs[len(logs)-1]
 		var errRecv *internalErr.ErrRecoverable
-		if strings.Contains(lastEntry.Message, "recoverable socket read error") &&
+		return strings.Contains(lastEntry.Message, "recoverable socket read error") &&
 			lastEntry.Context[0].Type == zapcore.ErrorType &&
 			errors.As(lastEntry.Context[0].Interface.(error), &errRecv) &&
-			strings.Compare(errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error(), randErrStr.String()) == 0 {
-			return true
-		}
-		return false
+			errors.Unwrap(lastEntry.Context[0].Interface.(error)).Error() == randErrStr.String()
 	}, "poller should encounter generic socket read error")
 }
 

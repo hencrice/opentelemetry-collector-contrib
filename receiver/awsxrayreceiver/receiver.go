@@ -63,6 +63,8 @@ func newReceiver(config *Config,
 		return nil, componenterror.ErrNilNextConsumer
 	}
 
+	logger.Info("Going to listen on endpoint for X-Ray segments",
+		zap.String(udppoller.Transport, config.Endpoint))
 	poller, err := udppoller.New(&udppoller.Config{
 		ReceiverInstanceName: config.Name(),
 		Transport:            config.Transport,
@@ -73,7 +75,7 @@ func newReceiver(config *Config,
 		return nil, err
 	}
 
-	logger.Info("Going to listen on endpoint for X-Ray segments",
+	logger.Info("Listening on endpoint for X-Ray segments",
 		zap.String(udppoller.Transport, config.Endpoint))
 
 	return &xrayReceiver{
