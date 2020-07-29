@@ -27,6 +27,11 @@ import (
 	"strings"
 )
 
+const (
+	// TypeStr is the type and ingest format of this receiver
+	TypeStr = "aws_xray"
+)
+
 // Header stores header of trace segment.
 type Header struct {
 	Format  string `json:"format"`
