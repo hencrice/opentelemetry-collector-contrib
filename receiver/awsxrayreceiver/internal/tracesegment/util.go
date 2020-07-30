@@ -21,7 +21,7 @@
 // or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and limitations under the License.
 
-package util
+package tracesegment
 
 import (
 	"bytes"
@@ -30,7 +30,6 @@ import (
 	"fmt"
 
 	recvErr "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/errors"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
 // ProtocolSeparator is the character used to split the header and body in an
@@ -41,7 +40,7 @@ const ProtocolSeparator = '\n'
 // It returns the body of the segment if:
 // 1. header and body can be correctly separated
 // 2. header is valid
-func SplitHeaderBody(buf []byte) (*tracesegment.Header, []byte, error) {
+func SplitHeaderBody(buf []byte) (*Header, []byte, error) {
 	if buf == nil {
 		return nil, nil, &recvErr.ErrRecoverable{
 			Err: errors.New("buffer to split is nil"),
@@ -58,7 +57,7 @@ func SplitHeaderBody(buf []byte) (*tracesegment.Header, []byte, error) {
 	headerBytes = buf[0:loc]
 	bodyBytes = buf[loc+1:]
 
-	header := tracesegment.Header{}
+	header := Header{}
 	err := json.Unmarshal(headerBytes, &header)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid header %w",

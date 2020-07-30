@@ -18,7 +18,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"path"
 	"strings"
 	"sync"
 	"testing"
@@ -157,9 +159,10 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 	addr, rcvr, _ := createAndOptionallyStartReceiver(t, receiverName, nil, true)
 	defer rcvr.Shutdown(context.Background())
 
-	// valid header with invalid body (for now this is ok because we haven't
-	// implemented the X-Ray segment -> OT format conversion)
-	err = writePacket(t, addr, `{"format": "json", "version": 1}`+"\nBody")
+	content, err := ioutil.ReadFile(path.Join(".", "testdata", "rawsegment", "ddbResourceNotFoundError.txt"))
+	assert.NoError(t, err, "can not read raw segment")
+
+	err = writePacket(t, addr, string(content))
 	assert.NoError(t, err, "can not write packet in the happy case")
 
 	sink := rcvr.(*xrayReceiver).consumer.(*exportertest.SinkTraceExporter)
@@ -184,9 +187,10 @@ func TestSegmentsConsumerErrorsOut(t *testing.T) {
 		true)
 	defer rcvr.Shutdown(context.Background())
 
-	// valid header with invalid body (for now this is ok because we haven't
-	// implemented the X-Ray segment -> OT format conversion)
-	err = writePacket(t, addr, `{"format": "json", "version": 1}`+"\nBody")
+	content, err := ioutil.ReadFile(path.Join(".", "testdata", "rawsegment", "ddbResourceNotFoundError.txt"))
+	assert.NoError(t, err, "can not read raw segment")
+
+	err = writePacket(t, addr, string(content))
 	assert.NoError(t, err, "can not write packet")
 
 	testutil.WaitFor(t, func() bool {

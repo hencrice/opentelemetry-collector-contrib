@@ -36,7 +36,6 @@ import (
 	recvErr "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/errors"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/socketconn"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/util"
 )
 
 const (
@@ -196,14 +195,14 @@ func (p *poller) poll() {
 
 			bufMessage := buffer[0:rlen]
 
-			header, body, err := util.SplitHeaderBody(bufMessage)
+			header, body, err := tracesegment.SplitHeaderBody(bufMessage)
 			if errors.As(err, &errRecv) {
 				p.logger.Error("Failed to split segment header and body",
 					zap.Error(err))
 				obsreport.EndTraceDataReceiveOp(ctx, tracesegment.TypeStr, 1, err)
 				continue
 			}
-			// For now util.SplitHeaderBody does not return irrecoverable error
+			// For now tracesegment.SplitHeaderBody does not return irrecoverable error
 			// so we don't check for it
 
 			if len(body) == 0 {
