@@ -30,25 +30,73 @@ const (
 	originEB  = "AWS::ElasticBeanstalk::Environment"
 )
 
-// the maximum possible number of attribute per X-Ray segment
-// Origin,
-const maxAttributeCount = 30
+const (
+	// these are just guesses to avoid too many memory allocation
+	initAttrCapacity = 30
+)
 
-// ToOTSpans converts X-Ray segment to OT traces.
-func ToOTSpans(rawSeg []byte) (*pdata.Traces, error) {
-	var segment tracesegment.Segment
-	err := json.Unmarshal(rawSeg, &segment)
+// ToTraces converts X-Ray segment (and its subsegments) to OT traces.
+func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
+	var seg tracesegment.Segment
+	err := json.Unmarshal(rawSeg, &seg)
+	if err != nil {
+		return nil, err
+	}
+
+	err = seg.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	// example: https://github.com/open-telemetry/opentelemetry-collector/blob/e7ab219cb573242cf3a3143e78cb3819518e254d/translator/trace/jaeger/jaegerproto_to_traces.go#L36
 	traceData := pdata.NewTraces()
-	rss := traceData.ResourceSpans()
-	rss.Resize(1)
-	segToResourceSpan(&segment, rss.At(0))
+	segToResourceSpansSlice(&seg, &traceData.ResourceSpans())
 
-	return nil, nil
+	return &traceData, nil
+}
+
+// this function recursively appends pdata.ResourceSpans per each segment and (possibly nested) subsegments (if there's any) to the passed in pdata.ResourceSpansSlice
+func segToResourceSpansSlice(seg *tracesegment.Segment, dest *pdata.ResourceSpansSlice) {
+	if len(seg.Subsegments) == 0 {
+		dest.Resize(dest.Len() + 1)    // initialize a new empty pdata.ResourceSpans
+		rss := dest.At(dest.Len() - 1) // retrieve the empty pdata.ResourceSpans we just created
+
+		// allocate a new span
+		rss.InstrumentationLibrarySpans().Resize(1)
+		ils := rss.InstrumentationLibrarySpans().At(0)
+		ils.Spans().Resize(1)
+		span := ils.Spans().At(0)
+
+		// allocate a new attribute map within the pdata.ResourceSpans allocated above
+		attrs := rss.Resource().Attributes()
+		attrs.InitEmptyWithCapacity(initAttrCapacity)
+
+		populateSpan(seg, &span)
+
+		populateResourceAttrs(seg, &attrs)
+	} else {
+		// recursively traverse subsegments to generate otlptrace.ResourceSpans
+		for s := range seg.Subsegments {
+			segToResourceSpansSlice(&s, dest)
+		}
+	}
+}
+
+func populateSpan(seg *tracesegment.Segment, span *pdata.Span)
+
+// here we assume each segment and (possibly nested) subsegment needs its own otlptrace.ResourceSpans
+func getNumOfResourceSpansNeeded(seg *tracesegment.Segment) int {
+	if len(seg.Subsegments) == 0 {
+		// don't need to traverse subsegments, so return 1 to indicate
+		// that this segment needs a corresponding ResourceSpans
+		return 1
+	} else {
+		totalSubSegCounts := 0 // also includes all possibly nested subsegments
+		for s := range seg.Subsegments {
+			totalSubSegCounts += getNumOfResourceSpansNeeded(&s)
+		}
+		return 1 + totalSubSegCounts
+	}
 }
 
 func segToResourceSpan(segment *tracesegment.Segment, dest pdata.ResourceSpans) {
@@ -58,21 +106,6 @@ func segToResourceSpan(segment *tracesegment.Segment, dest pdata.ResourceSpans) 
 
 	addOriginToResource(segment.Origin, dest.Resource().Attributes())
 	addAWSToResource(segment.AWS, dest.Resource().Attributes())
-}
-
-func addOriginToResource(origin *string, attrs pdata.AttributeMap) {
-	if origin == nil || *origin == originEC2 {
-		// resource will be nil and is treated by the AWS X-Ray exporter (in
-		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
-		// as origin == "AWS::EC2::Instance"
-		return
-	}
-
-	if *origin == originEB {
-		attrs.UpsertString(conventions.AttributeServiceInstance, *origin)
-	} else if *origin == originECS {
-		attrs.UpsertString(conventions.AttributeContainerName, *origin)
-	}
 }
 
 func addAWSToResource(aws map[string]interface{}, attrs pdata.AttributeMap) {

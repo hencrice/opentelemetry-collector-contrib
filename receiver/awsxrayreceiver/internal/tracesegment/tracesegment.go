@@ -25,6 +25,7 @@ package tracesegment
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -88,6 +89,25 @@ type Segment struct {
 
 	Namespace *string `json:"namespace,omitempty"`
 	Traced    *bool   `json:"traced,omitempty"`
+}
+
+// Validate checks whether the segment is valid or not
+func (s *Segment) Validate() error {
+	if s.Name == nil {
+		return errors.New("segment name can not be nil")
+	}
+
+	if s.ID == nil {
+		return errors.New("segment id can not be nil")
+	}
+
+	if s.StartTime == nil {
+		return errors.New("segment start_time can not be nil")
+	}
+
+	if s.TraceID == nil {
+		return errors.New("segment trace_id can not be nil")
+	}
 }
 
 // AWSData represents the aws resource that this segment
