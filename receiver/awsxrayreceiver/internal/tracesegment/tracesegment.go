@@ -81,13 +81,49 @@ type Segment struct {
 	Type         *string                           `json:"type,omitempty"`
 	Subsegments  []Segment                         `json:"subsegments,omitempty"`
 	HTTP         *HTTPData                         `json:"http,omitempty"`
-	AWS          map[string]interface{}            `json:"aws,omitempty"`
+	AWS          *AWSData                          `json:"aws,omitempty"`
 	SQL          *SQLData                          `json:"sql,omitempty"`
 	Service      *ServiceData                      `json:"service,omitempty"`
 	PrecursorIDs []string                          `json:"precursor_ids,omitempty"`
 
 	Namespace *string `json:"namespace,omitempty"`
 	Traced    *bool   `json:"traced,omitempty"`
+}
+
+// AWSData represents the aws resource that this segment
+// originates from
+type AWSData struct {
+	AccountID         *string            `json:"account_id,omitempty"`
+	BeanstalkMetadata *BeanstalkMetadata `json:"elastic_beanstalk,omitempty"`
+	ECS               *ECSMetadata       `json:"ecs,omitempty"`
+	EC2               *EC2Metadata       `json:"ec2,omitempty"`
+	XRay              *XRayMetaData      `json:"xray,omitempty"`
+	Operation         *string            `json:"operation,omitempty"`
+	RemoteRegion      *string            `json:"region,omitempty"`
+	RequestID         *string            `json:"request_id,omitempty"`
+	QueueURL          *string            `json:"queue_url,omitempty"`
+	TableName         *string            `json:"table_name,omitempty"`
+	Retries           *int               `json:"retries,omitempty"`
+}
+
+// EC2Metadata represents the EC2 metadata field
+type EC2Metadata struct {
+	InstanceID       *string `json:"instance_id"`
+	AvailabilityZone *string `json:"availability_zone"`
+	InstanceSize     *string `json:"instance_size"`
+	AmiID            *string `json:"ami_id"`
+}
+
+// ECSMetadata represents the ECS metadata field
+type ECSMetadata struct {
+	ContainerName *string `json:"container"`
+}
+
+// BeanstalkMetadata represents the Elastic Beanstalk environment metadata field
+type BeanstalkMetadata struct {
+	Environment  *string `json:"environment_name"`
+	VersionLabel *string `json:"version_label"`
+	DeploymentID *int64  `json:"deployment_id"`
 }
 
 // CauseData is the container that contains the `cause` field
@@ -189,8 +225,8 @@ type TracingData struct {
 	SDK *string `json:"sdk,omitempty"`
 }
 
-// XRayData provides the shape for unmarshalling the xray field
-type XRayData struct {
+// XRayMetaData provides the shape for unmarshalling the xray field
+type XRayMetaData struct {
 	SDKVersion *string `json:"sdk_version,omitempty"`
 	SDK        *string `json:"sdk,omitempty"`
 }

@@ -286,12 +286,12 @@ var RawExpectedSegment = Segment{
 					ContentLength: aws.Int(145),
 				},
 			},
-			AWS: map[string]interface{}{
-				"operation":  "DescribeTable",
-				"region":     "us-west-2",
-				"request_id": "END70G12L90RIJGETVF97FBV63VV4KQNSO5AEMVJF66Q9ASUAAJG",
-				"retries":    0.0,
-				"table_name": "does_not_exist",
+			AWS: &AWSData{
+				Operation:    aws.String("DescribeTable"),
+				RemoteRegion: aws.String("us-west-2"),
+				RequestID:    aws.String("END70G12L90RIJGETVF97FBV63VV4KQNSO5AEMVJF66Q9ASUAAJG"),
+				Retries:      aws.Int(0),
+				TableName:    aws.String("does_not_exist"),
 			},
 			Subsegments: []Segment{
 				{
@@ -543,10 +543,10 @@ var RawExpectedSegment = Segment{
 			},
 		},
 	},
-	AWS: map[string]interface{}{
-		"xray": map[string]interface{}{
-			"sdk_version": "1.1.0",
-			"sdk":         "X-Ray for Go",
+	AWS: &AWSData{
+		XRay: &XRayMetaData{
+			SDKVersion: aws.String("1.1.0"),
+			SDK:        aws.String("X-Ray for Go"),
 		},
 	},
 	Service: &ServiceData{
