@@ -15,21 +15,21 @@
 package transformer
 
 import (
+	"time"
+
 	"go.opentelemetry.io/collector/consumer/pdata"
-	"go.opentelemetry.io/collector/translator/conventions"
 )
 
-func addOrigin(origin *string, attrs *pdata.AttributeMap) {
-	if origin == nil || *origin == originEC2 {
-		// resource will be nil and is treated by the AWS X-Ray exporter (in
-		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
-		// as origin == "AWS::EC2::Instance"
-		return
-	}
+func addStartTime(startTime *float64, span *pdata.Span) {
+	span.SetStartTime(floatSecToNanoEpoch(startTime))
+}
 
-	if *origin == originEB {
-		attrs.UpsertString(conventions.AttributeServiceInstance, *origin)
-	} else if *origin == originECS {
-		attrs.UpsertString(conventions.AttributeContainerName, *origin)
+func addEndTime(endTime *float64, span *pdata.Span) {
+	if endTime != nil {
+		span.SetEndTime(floatSecToNanoEpoch(endTime))
 	}
+}
+
+func floatSecToNanoEpoch(t *float64) pdata.TimestampUnixNano {
+	return pdata.TimestampUnixNano((*t) * float64(time.Second))
 }

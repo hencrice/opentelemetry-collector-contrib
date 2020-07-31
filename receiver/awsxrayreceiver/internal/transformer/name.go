@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package transformer
 
 import (
@@ -19,17 +18,9 @@ import (
 	"go.opentelemetry.io/collector/translator/conventions"
 )
 
-func addOrigin(origin *string, attrs *pdata.AttributeMap) {
-	if origin == nil || *origin == originEC2 {
-		// resource will be nil and is treated by the AWS X-Ray exporter (in
-		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
-		// as origin == "AWS::EC2::Instance"
-		return
-	}
-
-	if *origin == originEB {
-		attrs.UpsertString(conventions.AttributeServiceInstance, *origin)
-	} else if *origin == originECS {
-		attrs.UpsertString(conventions.AttributeContainerName, *origin)
+func addName(name *string, attrs *pdata.AttributeMap) {
+	// https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/86c438b1543dd9e56fd77bff74b24aab6f19ce72/instrumentation/aws-sdk/aws-sdk-2.2/library/src/main/java/io/opentelemetry/instrumentation/awssdk/v2_2/AwsSdkClientDecorator.java#L60
+	if name != nil {
+		attrs.InsertString(conventions.AttributePeerService, *name)
 	}
 }

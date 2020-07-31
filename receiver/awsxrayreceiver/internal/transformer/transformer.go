@@ -50,7 +50,8 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 
 	// example: https://github.com/open-telemetry/opentelemetry-collector/blob/e7ab219cb573242cf3a3143e78cb3819518e254d/translator/trace/jaeger/jaegerproto_to_traces.go#L36
 	traceData := pdata.NewTraces()
-	segToResourceSpansSlice(&seg, &traceData.ResourceSpans())
+	rss := rsstraceData.ResourceSpans()
+	segToResourceSpansSlice(&seg, &rss)
 
 	return &traceData, nil
 }
@@ -58,22 +59,19 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 // this function recursively appends pdata.ResourceSpans per each segment and (possibly nested) subsegments (if there's any) to the passed in pdata.ResourceSpansSlice
 func segToResourceSpansSlice(seg *tracesegment.Segment, dest *pdata.ResourceSpansSlice) {
 	if len(seg.Subsegments) == 0 {
-		dest.Resize(dest.Len() + 1)    // initialize a new empty pdata.ResourceSpans
-		rss := dest.At(dest.Len() - 1) // retrieve the empty pdata.ResourceSpans we just created
+		dest.Resize(dest.Len() + 1)   // initialize a new empty pdata.ResourceSpans
+		rs := dest.At(dest.Len() - 1) // retrieve the empty pdata.ResourceSpans we just created
 
 		// allocate a new span
-		rss.InstrumentationLibrarySpans().Resize(1)
-		ils := rss.InstrumentationLibrarySpans().At(0)
+		rs.InstrumentationLibrarySpans().Resize(1)
+		ils := rs.InstrumentationLibrarySpans().At(0)
 		ils.Spans().Resize(1)
 		span := ils.Spans().At(0)
 
-		// allocate a new attribute map within the pdata.ResourceSpans allocated above
-		attrs := rss.Resource().Attributes()
-		attrs.InitEmptyWithCapacity(initAttrCapacity)
-
 		populateSpan(seg, &span)
 
-		populateResourceAttrs(seg, &attrs)
+		resource := rs.Resource()
+		populateResourceAttrs(seg, &resource)
 	} else {
 		// recursively traverse subsegments to generate otlptrace.ResourceSpans
 		for s := range seg.Subsegments {
@@ -82,30 +80,37 @@ func segToResourceSpansSlice(seg *tracesegment.Segment, dest *pdata.ResourceSpan
 	}
 }
 
-func populateSpan(seg *tracesegment.Segment, span *pdata.Span)
+func populateSpan(seg *tracesegment.Segment, span *pdata.Span) {
+	// allocate a new attribute map within the span created above
+	attrs := span.Attributes()
+	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
-// here we assume each segment and (possibly nested) subsegment needs its own otlptrace.ResourceSpans
-func getNumOfResourceSpansNeeded(seg *tracesegment.Segment) int {
-	if len(seg.Subsegments) == 0 {
-		// don't need to traverse subsegments, so return 1 to indicate
-		// that this segment needs a corresponding ResourceSpans
-		return 1
-	} else {
-		totalSubSegCounts := 0 // also includes all possibly nested subsegments
-		for s := range seg.Subsegments {
-			totalSubSegCounts += getNumOfResourceSpansNeeded(&s)
-		}
-		return 1 + totalSubSegCounts
+	addName(seg.Name, span)
+	span.SetTraceID(*seg.TraceID)
+	span.SetID(*seg.ID)
+	addStartTime(seg.StartTime, span)
+
+	addEndTime(seg.EndTime, span)
+	addInProgress(seg.InProgress, span)
+
+	addCause(seg, span)
+
+	if seg.ParentID != nil {
+		span.SetParentSpanID(*seg.ParentID)
+	}
+
+	if seg.Type != nil {
+		span.SetKind(pdata.SpanKindSERVER)
 	}
 }
 
-func segToResourceSpan(segment *tracesegment.Segment, dest pdata.ResourceSpans) {
-	dest.InitEmpty()
-	attrs := dest.Attributes()
-	attrs.InitEmptyWithCapacity(maxAttributeCount)
+func populateResourceAttrs(seg *tracesegment.Segment, rs *pdata.Resource) {
+	// allocate a new attribute map within the Resource in the pdata.ResourceSpans allocated above
+	attrs := rs.Attributes()
+	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
-	addOriginToResource(segment.Origin, dest.Resource().Attributes())
-	addAWSToResource(segment.AWS, dest.Resource().Attributes())
+	addOriginField(seg.Origin, &attrs)
+	addAWSField(seg.AWS, &attrs)
 }
 
 func addAWSToResource(aws map[string]interface{}, attrs pdata.AttributeMap) {
