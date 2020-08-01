@@ -85,7 +85,7 @@ func populateSpan(seg *tracesegment.Segment, span *pdata.Span) {
 	attrs := span.Attributes()
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
-	addName(seg.Name, span)
+	addNameAndNamespace(seg, span)
 	span.SetTraceID(*seg.TraceID)
 	span.SetID(*seg.ID)
 	addStartTime(seg.StartTime, span)

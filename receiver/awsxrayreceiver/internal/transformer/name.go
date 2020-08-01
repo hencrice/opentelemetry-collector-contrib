@@ -16,10 +16,26 @@ package transformer
 import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter/translator"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-func addName(name *string, attrs *pdata.AttributeMap) {
+const (
+	validAWSNamespace    = "aws"
+	validRemoteNamespace = "remote"
+)
+
+func addNameAndNamespace(seg *tracesegment.Segment, attrs *pdata.AttributeMap) {
 	// https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/86c438b1543dd9e56fd77bff74b24aab6f19ce72/instrumentation/aws-sdk/aws-sdk-2.2/library/src/main/java/io/opentelemetry/instrumentation/awssdk/v2_2/AwsSdkClientDecorator.java#L60
+	// TODO: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L144
+	// need to use the correct key name below
+
+	if seg.Namespace != nil {
+		if *seg.Namespace == validAWSNamespace {
+			attrs.InsertString(translator.AWSServiceAttribute, *name)
+		}
+	}
 	if name != nil {
 		attrs.InsertString(conventions.AttributePeerService, *name)
 	}
