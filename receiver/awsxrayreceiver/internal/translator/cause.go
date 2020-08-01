@@ -16,15 +16,16 @@ package translator
 
 import (
 	"go.opentelemetry.io/collector/consumer/pdata"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-const (
-	xrayInProgressAttribute = "aws.xray.inprogress"
-)
-
-func addBool(val *bool, attrKey string, span *pdata.Span) {
-	if val != nil {
-		attrs := span.Attributes()
-		attrs.InsertBool(attrKey, *val)
+func addCause(seg *tracesegment.Segment, span *pdata.Span) {
+	if seg.Cause != nil {
+		switch seg.Cause.Type {
+		case tracesegment.CauseTypeExceptionID:
+		case tracesegment.CauseTypeObject:
+		}
+		span.Status().SetCode()
 	}
 }
