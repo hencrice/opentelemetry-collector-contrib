@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package transformer
+package translator
 
 import (
 	"encoding/json"
@@ -50,7 +50,7 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 
 	// example: https://github.com/open-telemetry/opentelemetry-collector/blob/e7ab219cb573242cf3a3143e78cb3819518e254d/translator/trace/jaeger/jaegerproto_to_traces.go#L36
 	traceData := pdata.NewTraces()
-	rss := rsstraceData.ResourceSpans()
+	rss := traceData.ResourceSpans()
 	segToResourceSpansSlice(&seg, &rss)
 
 	return &traceData, nil
@@ -74,7 +74,7 @@ func segToResourceSpansSlice(seg *tracesegment.Segment, dest *pdata.ResourceSpan
 		populateResourceAttrs(seg, &resource)
 	} else {
 		// recursively traverse subsegments to generate otlptrace.ResourceSpans
-		for s := range seg.Subsegments {
+		for _, s := range seg.Subsegments {
 			segToResourceSpansSlice(&s, dest)
 		}
 	}
@@ -86,13 +86,12 @@ func populateSpan(seg *tracesegment.Segment, span *pdata.Span) {
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
 	addNameAndNamespace(seg, span)
-	span.SetTraceID(*seg.TraceID)
-	span.SetID(*seg.ID)
+	span.SetTraceID(pdata.TraceID([]byte(*seg.TraceID)))
+	span.SetID(pdata.SpanID([]byte(*seg.ID)))
 	addStartTime(seg.StartTime, span)
 
 	addEndTime(seg.EndTime, span)
-	addInProgress(seg.InProgress, span)
-
+	addBool(seg.InProgress, xrayInProgressAttribute, span)
 	addCause(seg, span)
 
 	if seg.ParentID != nil {

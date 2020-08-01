@@ -12,24 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package transformer
+package translator
 
 import (
 	"go.opentelemetry.io/collector/consumer/pdata"
-	"go.opentelemetry.io/collector/translator/conventions"
 )
 
-func addOrigin(origin *string, attrs *pdata.AttributeMap) {
-	if origin == nil || *origin == originEC2 {
-		// resource will be nil and is treated by the AWS X-Ray exporter (in
-		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
-		// as origin == "AWS::EC2::Instance"
-		return
-	}
+const (
+	xrayInProgressAttribute = "aws.xray.inprogress"
+)
 
-	if *origin == originEB {
-		attrs.UpsertString(conventions.AttributeServiceInstance, *origin)
-	} else if *origin == originECS {
-		attrs.UpsertString(conventions.AttributeContainerName, *origin)
+func addBool(val *bool, attrKey string, span *pdata.Span) {
+	if val != nil {
+		attrs := span.Attributes()
+		attrs.InsertBool(attrKey, *val)
 	}
 }

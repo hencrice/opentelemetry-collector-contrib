@@ -12,4 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-func populateSpan()
+package translator
+
+import (
+	"time"
+
+	"go.opentelemetry.io/collector/consumer/pdata"
+)
+
+func addStartTime(startTime *float64, span *pdata.Span) {
+	span.SetStartTime(floatSecToNanoEpoch(startTime))
+}
+
+func addEndTime(endTime *float64, span *pdata.Span) {
+	if endTime != nil {
+		span.SetEndTime(floatSecToNanoEpoch(endTime))
+	}
+}
+
+func floatSecToNanoEpoch(t *float64) pdata.TimestampUnixNano {
+	return pdata.TimestampUnixNano((*t) * float64(time.Second))
+}

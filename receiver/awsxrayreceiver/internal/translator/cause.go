@@ -12,24 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package transformer
+package translator
 
 import (
-	"time"
-
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-func addStartTime(startTime *float64, span *pdata.Span) {
-	span.SetStartTime(floatSecToNanoEpoch(startTime))
-}
+const (
+	xrayInProgressAttribute = "aws.xray.inprogress"
+)
 
-func addEndTime(endTime *float64, span *pdata.Span) {
-	if endTime != nil {
-		span.SetEndTime(floatSecToNanoEpoch(endTime))
+func addBool(val *bool, attrKey string, span *pdata.Span) {
+	if val != nil {
+		attrs := span.Attributes()
+		attrs.InsertBool(attrKey, *val)
 	}
-}
-
-func floatSecToNanoEpoch(t *float64) pdata.TimestampUnixNano {
-	return pdata.TimestampUnixNano((*t) * float64(time.Second))
 }

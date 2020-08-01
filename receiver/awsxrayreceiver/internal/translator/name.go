@@ -11,32 +11,34 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package transformer
+
+package translator
 
 import (
 	"go.opentelemetry.io/collector/consumer/pdata"
-	"go.opentelemetry.io/collector/translator/conventions"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter/translator"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
 const (
 	validAWSNamespace    = "aws"
 	validRemoteNamespace = "remote"
+	awsServiceAttribute  = "aws.service"
 )
 
-func addNameAndNamespace(seg *tracesegment.Segment, attrs *pdata.AttributeMap) {
+func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) {
 	// https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/86c438b1543dd9e56fd77bff74b24aab6f19ce72/instrumentation/aws-sdk/aws-sdk-2.2/library/src/main/java/io/opentelemetry/instrumentation/awssdk/v2_2/AwsSdkClientDecorator.java#L60
-	// TODO: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L144
-	// need to use the correct key name below
+	attrs := span.Attributes()
+
+	span.SetName(*seg.Name)
 
 	if seg.Namespace != nil {
 		if *seg.Namespace == validAWSNamespace {
-			attrs.InsertString(translator.AWSServiceAttribute, *name)
+			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L144
+			attrs.InsertString(awsServiceAttribute, *seg.Name)
+		} else if *seg.Namespace == validRemoteNamespace {
+			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L197
+			span.SetKind(pdata.SpanKindCLIENT)
 		}
-	}
-	if name != nil {
-		attrs.InsertString(conventions.AttributePeerService, *name)
 	}
 }
