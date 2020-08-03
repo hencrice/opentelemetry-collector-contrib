@@ -15,16 +15,18 @@
 package translator
 
 import (
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.opentelemetry.io/collector/translator/conventions"
 )
 
-const (
-	xrayInProgressAttribute = "aws.xray.inprogress"
-)
+func addService(srv *tracesegment.ServiceData, rs *pdata.Resource) {
+	if srv == nil {
+		return
+	}
 
-func addBool(val *bool, attrKey string, span *pdata.Span) {
-	if val != nil {
-		attrs := span.Attributes()
-		attrs.InsertBool(attrKey, *val)
+	attrs := rs.Attributes()
+	if srv.Version != nil {
+		attrs.UpsertString(conventions.AttributeServiceVersion, *srv.Version)
 	}
 }

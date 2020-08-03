@@ -16,24 +16,16 @@ package translator
 
 import (
 	"go.opentelemetry.io/collector/consumer/pdata"
-	"go.opentelemetry.io/collector/translator/conventions"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-func addOrigin(origin *string, rs *pdata.Resource) {
-	if origin == nil {
-		// resource will be nil and is treated by the AWS X-Ray exporter (in
-		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
-		// as origin == "AWS::EC2::Instance"
-		return
-	}
-
-	switch *origin {
-	case originEB:
-		attrs.UpsertString(conventions.AttributeServiceInstance, *origin)
-	case originECS:
-		attrs.UpsertString(conventions.AttributeContainerName, *origin)
-	default:
-		// X-Ray exporter treats this as origin == "AWS::EC2::Instance"
-		return
+func populateInstrumentationLibrary(seg *tracesegment.Segment, ils *pdata.InstrumentationLibrarySpans) {
+	if seg.AWS != nil && seg.AWS.XRay != nil {
+		xr := seg.AWS.XRay
+		il := ils.InstrumentationLibrary()
+		il.InitEmpty()
+		il.SetName(*xr.SDK)
+		il.SetVersion(*xr.SDKVersion)
 	}
 }

@@ -60,35 +60,40 @@ const (
 // Segment schema is documented in xray-segmentdocument-schema-v1.0.0 listed
 // on https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html
 type Segment struct {
-	// Required fields
+	// Required fields for both segment and subsegments
 	Name      *string  `json:"name"`
 	ID        *string  `json:"id"`
 	StartTime *float64 `json:"start_time"`
-	TraceID   *string  `json:"trace_id"`
 
-	// Optional fields
-	EndTime      *float64                          `json:"end_time"`
-	InProgress   *bool                             `json:"in_progress"`
-	Fault        *bool                             `json:"fault,omitempty"`
-	Error        *bool                             `json:"error,omitempty"`
-	Throttle     *bool                             `json:"throttle,omitempty"`
-	User         *string                           `json:"user,omitempty"`
-	ResourceARN  *string                           `json:"resource_arn,omitempty"`
-	Origin       *string                           `json:"origin,omitempty"`
-	ParentID     *string                           `json:"parent_id,omitempty"`
-	Cause        *CauseData                        `json:"cause,omitempty"`
-	Annotations  map[string]interface{}            `json:"annotations,omitempty"`
-	Metadata     map[string]map[string]interface{} `json:"metadata,omitempty"`
-	Type         *string                           `json:"type,omitempty"`
-	Subsegments  []Segment                         `json:"subsegments,omitempty"`
-	HTTP         *HTTPData                         `json:"http,omitempty"`
-	AWS          *AWSData                          `json:"aws,omitempty"`
-	SQL          *SQLData                          `json:"sql,omitempty"`
-	Service      *ServiceData                      `json:"service,omitempty"`
-	PrecursorIDs []string                          `json:"precursor_ids,omitempty"`
+	// Segment-only optional fields
+	Service     *ServiceData `json:"service,omitempty"`
+	Origin      *string      `json:"origin,omitempty"`
+	User        *string      `json:"user,omitempty"`
+	ResourceARN *string      `json:"resource_arn,omitempty"`
 
-	Namespace *string `json:"namespace,omitempty"`
-	Traced    *bool   `json:"traced,omitempty"`
+	// Optional fields for both Segment and subsegments
+	TraceID     *string                           `json:"trace_id"`
+	EndTime     *float64                          `json:"end_time"`
+	InProgress  *bool                             `json:"in_progress"`
+	HTTP        *HTTPData                         `json:"http,omitempty"`
+	Fault       *bool                             `json:"fault,omitempty"`
+	Error       *bool                             `json:"error,omitempty"`
+	Throttle    *bool                             `json:"throttle,omitempty"`
+	Cause       *CauseData                        `json:"cause,omitempty"`
+	AWS         *AWSData                          `json:"aws,omitempty"`
+	Annotations map[string]interface{}            `json:"annotations,omitempty"`
+	Metadata    map[string]map[string]interface{} `json:"metadata,omitempty"`
+	Subsegments []Segment                         `json:"subsegments,omitempty"`
+
+	// (for both embedded and independent) subsegment-only (optional) fields.
+	// Please refer to https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-subsegments
+	// for more information on subsegment.
+	Namespace    *string  `json:"namespace,omitempty"`
+	ParentID     *string  `json:"parent_id,omitempty"`
+	Type         *string  `json:"type,omitempty"`
+	PrecursorIDs []string `json:"precursor_ids,omitempty"`
+	Traced       *bool    `json:"traced,omitempty"`
+	SQL          *SQLData `json:"sql,omitempty"`
 }
 
 // Validate checks whether the segment is valid or not
@@ -105,6 +110,9 @@ func (s *Segment) Validate() error {
 		return errors.New(`segment "start_time" can not be nil`)
 	}
 
+	// it's ok for embedded subsegments to not have trace_id
+	// but the root segment and independent subsegments must all
+	// have trace_id.
 	if s.TraceID == nil {
 		return errors.New(`segment "trace_id" can not be nil`)
 	}
@@ -120,17 +128,21 @@ func (s *Segment) Validate() error {
 // AWSData represents the aws resource that this segment
 // originates from
 type AWSData struct {
-	AccountID         *string            `json:"account_id,omitempty"`
-	BeanstalkMetadata *BeanstalkMetadata `json:"elastic_beanstalk,omitempty"`
-	ECS               *ECSMetadata       `json:"ecs,omitempty"`
-	EC2               *EC2Metadata       `json:"ec2,omitempty"`
-	XRay              *XRayMetaData      `json:"xray,omitempty"`
-	Operation         *string            `json:"operation,omitempty"`
-	RemoteRegion      *string            `json:"region,omitempty"`
-	RequestID         *string            `json:"request_id,omitempty"`
-	QueueURL          *string            `json:"queue_url,omitempty"`
-	TableName         *string            `json:"table_name,omitempty"`
-	Retries           *int               `json:"retries,omitempty"`
+	// Segment-only
+	Beanstalk *BeanstalkMetadata `json:"elastic_beanstalk,omitempty"`
+	ECS       *ECSMetadata       `json:"ecs,omitempty"`
+	EC2       *EC2Metadata       `json:"ec2,omitempty"`
+	XRay      *XRayMetaData      `json:"xray,omitempty"`
+
+	// For both segment and subsegments
+	AccountID *string `json:"account_id,omitempty"`
+
+	Operation    *string `json:"operation,omitempty"`
+	RemoteRegion *string `json:"region,omitempty"`
+	RequestID    *string `json:"request_id,omitempty"`
+	QueueURL     *string `json:"queue_url,omitempty"`
+	TableName    *string `json:"table_name,omitempty"`
+	Retries      *int    `json:"retries,omitempty"`
 }
 
 // EC2Metadata represents the EC2 metadata field

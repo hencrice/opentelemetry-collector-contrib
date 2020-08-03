@@ -28,24 +28,28 @@ const (
 	awsServiceAttribute  = "aws.service"
 )
 
-func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {
-	// https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/86c438b1543dd9e56fd77bff74b24aab6f19ce72/instrumentation/aws-sdk/aws-sdk-2.2/library/src/main/java/io/opentelemetry/instrumentation/awssdk/v2_2/AwsSdkClientDecorator.java#L60
+func addNameNamespaceAndSpanType(seg *tracesegment.Segment, span *pdata.Span) error {
+	// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/api.md#spankind
 	attrs := span.Attributes()
 
 	if seg.Namespace != nil {
 		switch *seg.Namespace {
 		case validAWSNamespace:
-			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L144
-			attrs.InsertString(awsServiceAttribute, *seg.Name)
+			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L144
+			attrs.UpsertString(awsServiceAttribute, *seg.Name)
+			span.SetKind(pdata.SpanKindSERVER)
 		case validRemoteNamespace:
-			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L193
+			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L193
 			span.SetName(*seg.Name)
 
-			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/1322bef86dcb5940605e4666baccd54ba7ec2654/exporter/awsxrayexporter/translator/segment.go#L197
+			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L197
 			span.SetKind(pdata.SpanKindCLIENT)
 		default:
 			return fmt.Errorf("unexpected namespace: %s", *seg.Namespace)
 		}
-		return nil
+	} else {
+		span.SetName(*seg.Name)
+		span.SetKind(pdata.SpanKindCLIENT)
 	}
+	return nil
 }
