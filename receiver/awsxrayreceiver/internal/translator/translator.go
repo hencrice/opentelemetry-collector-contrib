@@ -31,7 +31,7 @@ const (
 )
 
 const (
-	// these are just guesses to avoid too many memory allocation
+	// just a guess to avoid too many memory re-allocation
 	initAttrCapacity = 30
 )
 
@@ -51,36 +51,36 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 	// example: https://github.com/open-telemetry/opentelemetry-collector/blob/e7ab219cb573242cf3a3143e78cb3819518e254d/translator/trace/jaeger/jaegerproto_to_traces.go#L36
 	traceData := pdata.NewTraces()
 	rss := traceData.ResourceSpans()
-	segToResourceSpansSlice(&seg, &rss)
+	segToResourceSpansSlice(&seg, nil, &rss)
 
 	return &traceData, nil
 }
 
 // this function recursively appends pdata.ResourceSpans per each segment and (possibly nested) subsegments (if there's any) to the passed in pdata.ResourceSpansSlice
-func segToResourceSpansSlice(seg *tracesegment.Segment, dest *pdata.ResourceSpansSlice) {
-	if len(seg.Subsegments) == 0 {
-		dest.Resize(dest.Len() + 1)   // initialize a new empty pdata.ResourceSpans
-		rs := dest.At(dest.Len() - 1) // retrieve the empty pdata.ResourceSpans we just created
+func segToResourceSpansSlice(seg *tracesegment.Segment, parentID *string, dest *pdata.ResourceSpansSlice) {
+	// create an otlptrace.ResourceSpans for the current (sub)segment
+	dest.Resize(dest.Len() + 1)   // initialize a new empty pdata.ResourceSpans
+	rs := dest.At(dest.Len() - 1) // retrieve the empty pdata.ResourceSpans we just created
 
-		// allocate a new span
-		rs.InstrumentationLibrarySpans().Resize(1)
-		ils := rs.InstrumentationLibrarySpans().At(0)
-		ils.Spans().Resize(1)
-		span := ils.Spans().At(0)
+	// allocate a new span
+	rs.InstrumentationLibrarySpans().Resize(1)
+	ils := rs.InstrumentationLibrarySpans().At(0)
+	ils.Spans().Resize(1)
+	span := ils.Spans().At(0)
 
-		populateSpan(seg, &span)
+	parentID = populateSpan(seg, parentID, &span)
 
-		resource := rs.Resource()
-		populateResourceAttrs(seg, &resource)
-	} else {
-		// recursively traverse subsegments to generate otlptrace.ResourceSpans
-		for _, s := range seg.Subsegments {
-			segToResourceSpansSlice(&s, dest)
-		}
+	resource := rs.Resource()
+	populateResourceAttrs(seg, &resource)
+
+	// For each subsegment, recursively traverse them to append more
+	// otlptrace.ResourceSpans to `dest`
+	for _, s := range seg.Subsegments {
+		segToResourceSpansSlice(&s, parentID, dest)
 	}
 }
 
-func populateSpan(seg *tracesegment.Segment, span *pdata.Span) {
+func populateSpan(seg *tracesegment.Segment, parentID *string, span *pdata.Span) {
 	// allocate a new attribute map within the span created above
 	attrs := span.Attributes()
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
@@ -94,13 +94,24 @@ func populateSpan(seg *tracesegment.Segment, span *pdata.Span) {
 	addBool(seg.InProgress, xrayInProgressAttribute, span)
 	addCause(seg, span)
 
-	if seg.ParentID != nil {
-		span.SetParentSpanID(*seg.ParentID)
-	}
+	if parentID != nil {
+		// `seg` is an embedded subsegment. Please refer to:
+		// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-subsegments
+		// for the difference between the embedded & independent subsegment.
+		span.SetParentSpanID(*parentID)
 
-	if seg.Type != nil {
+		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L201
+		span.SetKind(pdata.SpanKindSERVER)
+	} else if seg.ParentID != nil {
+		// `seg` is an independent subsegment
+		span.SetParentSpanID(*seg.ParentID)
+
 		span.SetKind(pdata.SpanKindSERVER)
 	}
+	// else: `seg` is the root full segment document with no parent segment.
+
+	// return the subsegment's ID to be used as the parentID of its subsegments
+	return seg.ID
 }
 
 func populateResourceAttrs(seg *tracesegment.Segment, rs *pdata.Resource) {
