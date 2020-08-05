@@ -23,16 +23,9 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-// AWS X-Ray acceptable values for origin field.
-const (
-	originEC2 = "AWS::EC2::Instance"
-	originECS = "AWS::ECS::Container"
-	originEB  = "AWS::ElasticBeanstalk::Environment"
-)
-
 const (
 	// just a guess to avoid too many memory re-allocation
-	initAttrCapacity = 30
+	initAttrCapacity = 15
 )
 
 // ToTraces converts X-Ray segment (and its subsegments) to OT traces.
@@ -67,12 +60,15 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 	ils.Spans().Resize(count)
 	spans := ils.Spans()
 
-	// populating global attributes shared among segment and all embedded subsegment(s)
+	// populating global attributes shared among segment and embedded subsegment(s)
 	populateInstrumentationLibrary(&seg, &ils)
 	populateResource(&seg, &resource)
 
-	// recursively traverse segment and all embedded subsegments
-	// to populate the spans.
+	// recursively traverse segment and embedded subsegments
+	// to populate the spans. We also need to pass in the
+	// TraceID of the root segment in because embedded subsegments
+	// do not have that information, but it's needed after we flatten
+	// the embedded subsegment to generate independent child spans.
 	_, err = segToSpans(&seg, seg.TraceID, nil, &spans, 0)
 	if err != nil {
 		return nil, err
@@ -84,15 +80,16 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 func segToSpans(seg *tracesegment.Segment, traceID, parentID *string, spans *pdata.SpanSlice, startingIndex int) (int, error) {
 	span := spans.At(startingIndex)
 
-	parentIDForSubsegments, err := populateSpan(seg, traceID, parentID, &span)
+	err := populateSpan(seg, traceID, parentID, &span)
 	if err != nil {
 		return err
 	}
 
-	var err error
 	startingIndexForSubsegment := 1 + startingIndex
 	for _, s := range seg.Subsegments {
-		startingIndexForSubsegment, err = segToSpans(&s, traceID, parentIDForSubsegments, spans, startingIndexForSubsegment)
+		startingIndexForSubsegment, err = segToSpans(&s,
+			traceID, seg.ID,
+			spans, startingIndexForSubsegment)
 		if err != nil {
 			return err
 		}
@@ -101,11 +98,11 @@ func segToSpans(seg *tracesegment.Segment, traceID, parentID *string, spans *pda
 	return startingIndexForSubsegment, nil
 }
 
-func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pdata.Span) (*string, error) {
+func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pdata.Span) error {
 	attrs := span.Attributes()
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
-	err := addNameNamespaceAndSpanType(seg, span)
+	err := addNameAndNamespace(seg, span)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +144,7 @@ func populateResource(seg *tracesegment.Segment, rs *pdata.Resource) {
 func totalSegmentsCount(seg *tracesegment.Segment) int {
 	subsegmentCount := 0
 	for _, s := range seg.Subsegments {
-		subsegmentCount += totalSegmentCount(seg)
+		subsegmentCount += totalSegmentsCount(&s)
 	}
 
 	return 1 + subsegmentCount

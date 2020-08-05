@@ -117,11 +117,6 @@ func (s *Segment) Validate() error {
 		return errors.New(`segment "trace_id" can not be nil`)
 	}
 
-	if s.Namespace != nil {
-		if *s.Namespace != "aws" && *s.Namespace != "remote" {
-			return errors.New(`segment "namespace" can only be "aws" or "remote"`)
-		}
-	}
 	return nil
 }
 

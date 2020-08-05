@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/aws/aws-sdk-go v1.33.17
+	github.com/aws/aws-xray-sdk-go v1.1.0 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/stretchr/testify v1.6.1
 	go.opentelemetry.io/collector v0.7.0

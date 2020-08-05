@@ -15,16 +15,25 @@
 package translator
 
 import (
+	"fmt"
+
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 )
 
-func addOrigin(origin *string, rs *pdata.Resource) {
+// AWS X-Ray acceptable values for origin field.
+const (
+	originEC2 = "AWS::EC2::Instance"
+	originECS = "AWS::ECS::Container"
+	originEB  = "AWS::ElasticBeanstalk::Environment"
+)
+
+func addOrigin(origin *string, rs *pdata.Resource) error {
 	if origin == nil {
 		// resource will be nil and is treated by the AWS X-Ray exporter (in
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
 		// as origin == "AWS::EC2::Instance"
-		return
+		return nil
 	}
 
 	switch *origin {
@@ -32,8 +41,10 @@ func addOrigin(origin *string, rs *pdata.Resource) {
 		attrs.UpsertString(conventions.AttributeServiceInstance, *origin)
 	case originECS:
 		attrs.UpsertString(conventions.AttributeContainerName, *origin)
+	case originEC2:
+		// X-Ray exporter treats this case as origin == "AWS::EC2::Instance"
+		return nil
 	default:
-		// X-Ray exporter treats this as origin == "AWS::EC2::Instance"
-		return
+		return fmt.Errorf("recognized")
 	}
 }

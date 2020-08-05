@@ -89,7 +89,7 @@ func TestTraceSegmentHeaderIsValidWrongFormatVersion(t *testing.T) {
 	assert.False(t, valid)
 }
 
-var RawExpectedSegment = Segment{
+var RawExpectedSegmentForInstrumentedApp = Segment{
 	Name:      aws.String("DDB"),
 	ID:        aws.String("88ad1df59cd7a7be"),
 	StartTime: aws.Float64(1596566305.535414),
@@ -581,6 +581,36 @@ var RawExpectedSegment = Segment{
 	},
 }
 
+var RawExpectedSegmentForInstrumentedServer = Segment{
+	Name:      aws.String("SampleServer"),
+	ID:        aws.String("bda182a644eee9b3"),
+	StartTime: aws.Float64(1596648396.6399446),
+	TraceID:   aws.String("1-5f2aebcc-b475d14618c51eaa28753d37"),
+	EndTime:   aws.Float64(1596648396.6401389),
+	HTTP: &HTTPData{
+		Request: &RequestData{
+			Method:        aws.String("GET"),
+			URL:           aws.String("http://localhost:8000/"),
+			ClientIP:      aws.String("127.0.0.1"),
+			UserAgent:     aws.String("Go-http-client/1.1"),
+			XForwardedFor: aws.Bool(true),
+		},
+		Response: &ResponseData{
+			Status: aws.Int(200),
+		},
+	},
+	AWS: &AWSData{
+		XRay: &XRayMetaData{
+			SDKVersion: aws.String("1.1.0"),
+			SDK:        aws.String("X-Ray for Go"),
+		},
+	},
+	Service: &ServiceData{
+		CompilerVersion: aws.String("go1.14.6"),
+		Compiler:        aws.String("gc"),
+	},
+}
+
 func TestTraceBodyUnMarshalling(t *testing.T) {
 	tests := []struct {
 		testCase     string
@@ -588,13 +618,13 @@ func TestTraceBodyUnMarshalling(t *testing.T) {
 		verification func(actualSeg Segment, err error)
 	}{
 		{
-			testCase:   "TestTraceBodyCorrectlyUnmarshalled",
+			testCase:   "TestTraceBodyCorrectlyUnmarshalledForInstrumentedApp",
 			samplePath: path.Join("../../", "testdata", "rawsegment", "ddbSample.txt"),
 			verification: func(actualSeg Segment, err error) {
 				assert.NoError(t, err, "JSON Unmarshalling should've succeeded")
 
-				assert.Equal(t, RawExpectedSegment,
-					actualSeg, "unmarshalled segment is different from the expected")
+				assert.Equal(t, RawExpectedSegmentForInstrumentedApp,
+					actualSeg, "unmarshalled app segment is different from the expected")
 			},
 		},
 		{
@@ -664,6 +694,16 @@ func TestTraceBodyUnMarshalling(t *testing.T) {
 						[]byte{'2', '0', '0'},
 					),
 					"invalid `cause` implies invalid segment, so unmarshalling should've failed")
+			},
+		},
+		{
+			testCase:   "TestTraceBodyCorrectlyUnmarshalledForInstrumentedServer",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "serverSample.txt"),
+			verification: func(actualSeg Segment, err error) {
+				assert.NoError(t, err, "JSON Unmarshalling should've succeeded")
+
+				assert.Equal(t, RawExpectedSegmentForInstrumentedServer,
+					actualSeg, "unmarshalled server segment is different from the expected")
 			},
 		},
 	}

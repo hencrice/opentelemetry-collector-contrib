@@ -17,6 +17,7 @@ package translator
 import (
 	"fmt"
 
+	expTrans "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter/translator"
 	"go.opentelemetry.io/collector/consumer/pdata"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
@@ -28,22 +29,23 @@ const (
 	awsServiceAttribute  = "aws.service"
 )
 
-func addNameNamespaceAndSpanType(seg *tracesegment.Segment, span *pdata.Span) error {
+func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {
 	// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/api.md#spankind
 	attrs := span.Attributes()
 
 	if seg.Namespace != nil {
+		// seg is a subsegment
+
+		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L197
+		span.SetKind(pdata.SpanKindCLIENT)
 		switch *seg.Namespace {
 		case validAWSNamespace:
 			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L144
-			attrs.UpsertString(awsServiceAttribute, *seg.Name)
-			span.SetKind(pdata.SpanKindSERVER)
+			attrs.UpsertString(expTrans.AWSServiceAttribute, *seg.Name)
+
 		case validRemoteNamespace:
 			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L193
 			span.SetName(*seg.Name)
-
-			// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L197
-			span.SetKind(pdata.SpanKindCLIENT)
 		default:
 			return fmt.Errorf("unexpected namespace: %s", *seg.Namespace)
 		}

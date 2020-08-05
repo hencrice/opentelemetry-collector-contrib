@@ -24,11 +24,13 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-aws
 func addAWSToResource(aws *tracesegment.AWSData, rs *pdata.Resource) {
+	// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-aws
 	attrs := rs.Attributes()
 	if aws == nil {
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/aws.go#L153
+		// this implies that the current segment being processed is not generated
+		// by an AWS entity.
 		attrs.UpsertString(conventions.AttributeCloudProvider, "nonAWS")
 		return
 	}
@@ -49,6 +51,8 @@ func addAWSToResource(aws *tracesegment.AWSData, rs *pdata.Resource) {
 		attrs.UpsertString(conventions.AttributeServiceInstance, strconv.FormatInt(*bs.DeploymentID, 10))
 		attrs.UpsertString(conventions.AttributeServiceVersion, *bs.VersionLabel)
 	}
+
+	// add conventions.AttributeServiceName with SpanKindSERVER
 }
 
 func addAWSToSpan(aws *tracesegment.AWSData, span *pdata.Span) {

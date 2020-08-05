@@ -31,6 +31,7 @@ func addHTTPAndCause(seg *tracesegment.Segment, span *pdata.Span) {
 
 		if req.ClientIP != nil {
 			attrs.UpsertString(conventions.AttributeHTTPClientIP, *req.ClientIP)
+			span.SetKind(pdata.SpanKindSERVER)
 		}
 
 		if req.UserAgent != nil {
