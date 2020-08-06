@@ -159,7 +159,7 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 	addr, rcvr, _ := createAndOptionallyStartReceiver(t, receiverName, nil, true)
 	defer rcvr.Shutdown(context.Background())
 
-	content, err := ioutil.ReadFile(path.Join(".", "testdata", "rawsegment", "ddbResourceNotFoundError.txt"))
+	content, err := ioutil.ReadFile(path.Join(".", "testdata", "rawsegment", "ddbSample.txt"))
 	assert.NoError(t, err, "can not read raw segment")
 
 	err = writePacket(t, addr, string(content))
@@ -175,6 +175,28 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 	obsreporttest.CheckReceiverTracesViews(t, receiverName, udppoller.Transport, 1, 0)
 }
 
+func TestTranslatorErrorsOut(t *testing.T) {
+	doneFn, err := obsreporttest.SetupRecordedMetricsTest()
+	assert.NoError(t, err, "SetupRecordedMetricsTest should succeed")
+	defer doneFn()
+
+	const receiverName = "TestTranslatorErrorsOut"
+
+	addr, rcvr, recordedLogs := createAndOptionallyStartReceiver(t, receiverName, nil, true)
+	defer rcvr.Shutdown(context.Background())
+
+	err = writePacket(t, addr, `{"format": "json", "version": 1}`+"\ninvalidSegment")
+	assert.NoError(t, err, "can not write packet in the "+receiverName+" case")
+
+	testutil.WaitFor(t, func() bool {
+		logs := recordedLogs.All()
+		return len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message,
+			"X-Ray segment to OT span transformation failed")
+	}, "poller should log warning because consumer errored out")
+
+	obsreporttest.CheckReceiverTracesViews(t, receiverName, udppoller.Transport, 0, 1)
+}
+
 func TestSegmentsConsumerErrorsOut(t *testing.T) {
 	doneFn, err := obsreporttest.SetupRecordedMetricsTest()
 	assert.NoError(t, err, "SetupRecordedMetricsTest should succeed")
@@ -187,7 +209,7 @@ func TestSegmentsConsumerErrorsOut(t *testing.T) {
 		true)
 	defer rcvr.Shutdown(context.Background())
 
-	content, err := ioutil.ReadFile(path.Join(".", "testdata", "rawsegment", "ddbResourceNotFoundError.txt"))
+	content, err := ioutil.ReadFile(path.Join(".", "testdata", "rawsegment", "serverSample.txt"))
 	assert.NoError(t, err, "can not read raw segment")
 
 	err = writePacket(t, addr, string(content))
@@ -195,10 +217,8 @@ func TestSegmentsConsumerErrorsOut(t *testing.T) {
 
 	testutil.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
-		if len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message, "Trace consumer errored out") {
-			return true
-		}
-		return false
+		return len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message,
+			"Trace consumer errored out")
 	}, "poller should log warning because consumer errored out")
 
 	obsreporttest.CheckReceiverTracesViews(t, receiverName, udppoller.Transport, 0, 1)

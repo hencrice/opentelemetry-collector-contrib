@@ -82,7 +82,7 @@ func segToSpans(seg *tracesegment.Segment, traceID, parentID *string, spans *pda
 
 	err := populateSpan(seg, traceID, parentID, &span)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	startingIndexForSubsegment := 1 + startingIndex
@@ -91,7 +91,7 @@ func segToSpans(seg *tracesegment.Segment, traceID, parentID *string, spans *pda
 			traceID, seg.ID,
 			spans, startingIndexForSubsegment)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -104,7 +104,7 @@ func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pd
 
 	err := addNameAndNamespace(seg, span)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if seg.TraceID == nil {
@@ -113,21 +113,21 @@ func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pd
 	} else {
 		span.SetTraceID(pdata.TraceID([]byte(*seg.TraceID)))
 	}
-	span.SetID(pdata.SpanID([]byte(*seg.ID)))
+	span.SetSpanID(pdata.SpanID([]byte(*seg.ID)))
 	addParentSpanID(seg, parentID, span)
 	addStartTime(seg.StartTime, span)
 
 	addEndTime(seg.EndTime, span)
-	addBoolToSpan(seg.InProgress, xrayInProgressAttribute, span)
+	addBool(seg.InProgress, AWSXRayInProgressAttribute, &attrs)
+	addString(seg.User, conventions.AttributeEnduserID, &attrs)
+
 	addHTTPAndCause(seg, span)
-	addAWSToSpan(seq.AWS, span)
-	addSQLToSpan(seq.SQL, span)
-	addStringToSpan(seg.User, conventions.AttributeEnduserID, span)
+	addAWSToSpan(seg.AWS, &attrs)
+	addSQLToSpan(seg.SQL, &attrs)
 
 	// TODO: handle annotations and metadata
 
-	// return the subsegment's ID to be used as the parentID of its subsegments
-	return seg.ID
+	return nil
 }
 
 func populateResource(seg *tracesegment.Segment, rs *pdata.Resource) {
@@ -135,10 +135,16 @@ func populateResource(seg *tracesegment.Segment, rs *pdata.Resource) {
 	attrs := rs.Attributes()
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
-	addOrigin(seg.Origin, rs)
-	addAWSToResource(seg.AWS, rs)
-	addService(seg.Service, rs)
-	addUser(seg.User)
+	addOrigin(seg.Origin, &attrs)
+	addAWSToResource(seg.AWS, &attrs)
+	if seg.Service != nil {
+		addString(
+			seg.Service.Version,
+			conventions.AttributeServiceVersion,
+			&attrs)
+	}
+
+	addString(seg.ResourceARN, AWSXRayResourceARNAttribute, &attrs)
 }
 
 func totalSegmentsCount(seg *tracesegment.Segment) int {

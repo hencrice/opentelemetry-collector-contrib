@@ -28,7 +28,7 @@ const (
 	originEB  = "AWS::ElasticBeanstalk::Environment"
 )
 
-func addOrigin(origin *string, rs *pdata.Resource) error {
+func addOrigin(origin *string, attrs *pdata.AttributeMap) error {
 	if origin == nil {
 		// resource will be nil and is treated by the AWS X-Ray exporter (in
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L253)
@@ -47,4 +47,5 @@ func addOrigin(origin *string, rs *pdata.Resource) error {
 	default:
 		return fmt.Errorf("recognized")
 	}
+	return nil
 }

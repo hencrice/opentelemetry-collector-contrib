@@ -51,7 +51,7 @@ func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {
 		}
 	} else {
 		span.SetName(*seg.Name)
-		span.SetKind(pdata.SpanKindCLIENT)
+		span.SetKind(pdata.SpanKindINTERNAL)
 	}
 	return nil
 }

@@ -130,8 +130,7 @@ type AWSData struct {
 	XRay      *XRayMetaData      `json:"xray,omitempty"`
 
 	// For both segment and subsegments
-	AccountID *string `json:"account_id,omitempty"`
-
+	AccountID    *string `json:"account_id,omitempty"`
 	Operation    *string `json:"operation,omitempty"`
 	RemoteRegion *string `json:"region,omitempty"`
 	RequestID    *string `json:"request_id,omitempty"`

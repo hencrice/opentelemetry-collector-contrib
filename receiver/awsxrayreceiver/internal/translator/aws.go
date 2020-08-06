@@ -24,9 +24,8 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-func addAWSToResource(aws *tracesegment.AWSData, rs *pdata.Resource) {
+func addAWSToResource(aws *tracesegment.AWSData, attrs *pdata.AttributeMap) {
 	// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-aws
-	attrs := rs.Attributes()
 	if aws == nil {
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/aws.go#L153
 		// this implies that the current segment being processed is not generated
@@ -36,9 +35,7 @@ func addAWSToResource(aws *tracesegment.AWSData, rs *pdata.Resource) {
 	}
 
 	attrs.UpsertString(conventions.AttributeCloudProvider, "aws")
-	if aws.AccountID != nil {
-		attrs.UpsertString(conventions.AttributeCloudAccount, *aws.AccountID)
-	}
+	addString(aws.AccountID, conventions.AttributeCloudAccount, attrs)
 	if ec2 := aws.EC2; ec2 != nil {
 		attrs.UpsertString(conventions.AttributeCloudZone, *ec2.AvailabilityZone)
 		attrs.UpsertString(conventions.AttributeHostID, *ec2.InstanceID)
@@ -51,32 +48,16 @@ func addAWSToResource(aws *tracesegment.AWSData, rs *pdata.Resource) {
 		attrs.UpsertString(conventions.AttributeServiceInstance, strconv.FormatInt(*bs.DeploymentID, 10))
 		attrs.UpsertString(conventions.AttributeServiceVersion, *bs.VersionLabel)
 	}
-
-	// add conventions.AttributeServiceName with SpanKindSERVER
 }
 
-func addAWSToSpan(aws *tracesegment.AWSData, span *pdata.Span) {
+func addAWSToSpan(aws *tracesegment.AWSData, attrs *pdata.AttributeMap) {
 	if aws != nil {
-		attrs := span.Attributes()
-
-		if aws.Operation != nil {
-			attrs.UpsertString(expTrans.AWSOperationAttribute, *aws.Operation)
-		}
-
-		if aws.RemoteRegion != nil {
-			attrs.UpsertString(expTrans.AWSRegionAttribute, *aws.RemoteRegion)
-		}
-
-		if aws.RequestID != nil {
-			attrs.UpsertString(expTrans.AWSRequestIDAttribute, *aws.RequestID)
-		}
-
-		if aws.QueueURL != nil {
-			attrs.UpsertString(expTrans.AWSQueueURLAttribute, *aws.QueueURL)
-		}
-
-		if aws.TableName != nil {
-			attrs.UpsertString(expTrans.AWSTableNameAttribute, *aws.TableName)
-		}
+		addString(aws.AccountID, expTrans.AWSAccountAttribute, attrs)
+		addString(aws.Operation, expTrans.AWSOperationAttribute, attrs)
+		addString(aws.RemoteRegion, expTrans.AWSRegionAttribute, attrs)
+		addString(aws.RequestID, expTrans.AWSRequestIDAttribute, attrs)
+		addString(aws.QueueURL, expTrans.AWSQueueURLAttribute, attrs)
+		addString(aws.TableName, expTrans.AWSTableNameAttribute, attrs)
+		// the "retries" field is dropped
 	}
 }

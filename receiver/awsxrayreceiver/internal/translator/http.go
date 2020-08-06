@@ -15,40 +15,47 @@
 package translator
 
 import (
+	"strconv"
+	"strings"
+
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
+const (
+	newLine   = "\n"
+	separator = ":"
+)
+
 func addHTTPAndCause(seg *tracesegment.Segment, span *pdata.Span) {
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/http.go#L47
 	attrs := span.Attributes()
-	if req := seg.HTTP.Request; req != nil {
-		if req.Method != nil {
-			attrs.UpsertString(conventions.AttributeHTTPMethod, *req.Method)
+	if seg.HTTP != nil {
+		if req := seg.HTTP.Request; req != nil {
+			// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-http
+			addString(req.Method, conventions.AttributeHTTPMethod, &attrs)
+
+			if req.ClientIP != nil {
+				// since the ClientIP is not nil, this means that this segment is generated
+				// by a server serving an incoming request
+				attrs.UpsertString(conventions.AttributeHTTPClientIP, *req.ClientIP)
+				span.SetKind(pdata.SpanKindSERVER)
+			}
+
+			addString(req.UserAgent, conventions.AttributeHTTPUserAgent, &attrs)
+			addString(req.URL, conventions.AttributeHTTPURL, &attrs)
+			addBool(req.XForwardedFor, AWSXRayXForwardedForAttribute, &attrs)
 		}
 
-		if req.ClientIP != nil {
-			attrs.UpsertString(conventions.AttributeHTTPClientIP, *req.ClientIP)
-			span.SetKind(pdata.SpanKindSERVER)
-		}
-
-		if req.UserAgent != nil {
-			attrs.UpsertString(conventions.AttributeHTTPUserAgent, *req.UserAgent)
-		}
-
-		if req.URL != nil {
-			attrs.UpsertString(conventions.AttributeHTTPURL, *req.URL)
-		}
-	}
-
-	if resp := seg.HTTP.Response; resp != nil {
-		if resp.Status != nil && resp.ContentLength != nil {
-			attrs.UpsertInt(conventions.AttributeHTTPStatusCode, int64(*resp.Status))
-			attrs.UpsertInt(conventions.AttributeHTTPResponseContentLength, int64(*resp.ContentLength))
-			if (*resp.Status < 200 || *resp.Status > 299) && seg.Cause != nil {
-				addCause(seg, span)
+		if resp := seg.HTTP.Response; resp != nil {
+			if resp.Status != nil && resp.ContentLength != nil {
+				attrs.UpsertInt(conventions.AttributeHTTPStatusCode, int64(*resp.Status))
+				attrs.UpsertInt(conventions.AttributeHTTPResponseContentLength, int64(*resp.ContentLength))
+				if (*resp.Status < 200 || *resp.Status > 299) && seg.Cause != nil {
+					addCause(seg, span)
+				}
 			}
 		}
 	}
@@ -78,11 +85,32 @@ func addCause(seg *tracesegment.Segment, span *pdata.Span) {
 			attrs := evt.Attributes()
 			attrs.InitEmptyWithCapacity(2)
 			if excp.Type != nil {
-				attrs.InsertString(conventions.AttributeExceptionType, *excp.Type)
-				attrs.InsertString(conventions.AttributeExceptionMessage, *excp.Message)
-				// For now the stack in the exception is not set via
-				// conventions.AttributeExceptionStacktrace
+				attrs.UpsertString(conventions.AttributeExceptionType, *excp.Type)
+				attrs.UpsertString(conventions.AttributeExceptionMessage, *excp.Message)
+				stackTrace := convertStackFramesToStackTraceStr(excp.Stack)
+				attrs.UpsertString(conventions.AttributeExceptionStacktrace, stackTrace)
+				// For now X-Ray's exception data model is not fully supported in the OpenTelemetry
+				// spec, so some information is lost here.
+				// For example, the "cause" ,"remote", ... and some fields within each exception
+				// are dropped.
 			}
 		}
 	}
+}
+
+func convertStackFramesToStackTraceStr(stack []tracesegment.StackFrame) string {
+	var b strings.Builder
+	for _, frame := range stack {
+		line := strconv.Itoa(*frame.Line)
+		// the string representation of a frame looks like:
+		// <*frame.Label>\n<*frame.Path>:line\n
+		b.Grow(len(*frame.Label) + len(*frame.Path) + len(line) + 3)
+		b.WriteString(*frame.Label)
+		b.WriteString(newLine)
+		b.WriteString(*frame.Path)
+		b.WriteString(separator)
+		b.WriteString(line)
+		b.WriteString(newLine)
+	}
+	return b.String()
 }

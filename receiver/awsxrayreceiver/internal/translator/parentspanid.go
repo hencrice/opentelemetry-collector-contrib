@@ -20,7 +20,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
 
-func addParentSpanID(seg *tracesegment.Segment, parentID *string, span *pdata.Span) error {
+func addParentSpanID(seg *tracesegment.Segment, parentID *string, span *pdata.Span) {
 	if parentID != nil {
 		// `seg` is an embedded subsegment. Please refer to:
 		// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-subsegments
@@ -30,5 +30,5 @@ func addParentSpanID(seg *tracesegment.Segment, parentID *string, span *pdata.Sp
 		// `seg` is an independent subsegment
 		span.SetParentSpanID(pdata.SpanID([]byte(*seg.ParentID)))
 	}
-	// else: `seg` is the root full segment document with no parent segment.
+	// else: `seg` is the root segment with no parent segment.
 }

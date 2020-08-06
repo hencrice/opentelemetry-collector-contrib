@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/component/componenterror"
 	"go.opentelemetry.io/collector/consumer"
-	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/obsreport"
 	"go.uber.org/zap"
 
@@ -111,14 +110,14 @@ func (x *xrayReceiver) Shutdown(_ context.Context) error {
 func (x *xrayReceiver) start() {
 	incomingSegments := x.poller.SegmentsChan()
 	for seg := range incomingSegments {
-		_, err := translator.ToTraces(seg.Payload)
+		traces, err := translator.ToTraces(seg.Payload)
 		if err != nil {
 			x.logger.Warn("X-Ray segment to OT span transformation failed", zap.Error(err))
 			obsreport.EndTraceDataReceiveOp(seg.Ctx, tracesegment.TypeStr, 1, err)
 			continue
 		}
 
-		err = x.consumer.ConsumeTraces(seg.Ctx, pdata.NewTraces())
+		err = x.consumer.ConsumeTraces(seg.Ctx, *traces)
 		if err != nil {
 			x.logger.Warn("Trace consumer errored out", zap.Error(err))
 			obsreport.EndTraceDataReceiveOp(seg.Ctx, tracesegment.TypeStr, 1, err)
