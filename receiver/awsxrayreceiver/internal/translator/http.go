@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	otlptrace "github.com/open-telemetry/opentelemetry-proto/gen/go/trace/v1"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 
@@ -51,9 +52,15 @@ func addHTTPAndCause(seg *tracesegment.Segment, span *pdata.Span) {
 
 		if resp := seg.HTTP.Response; resp != nil {
 			if resp.Status != nil && resp.ContentLength != nil {
+				span.Status().InitEmpty()
+				otStatus := httpStatusToOTStatus(*resp.Status)
+				// in X-Ray exporter, the segment status is set via
+				// span attributes, the status code here is not
+				// actually used
+				span.Status().SetCode(pdata.StatusCode(otStatus))
 				attrs.UpsertInt(conventions.AttributeHTTPStatusCode, int64(*resp.Status))
 				attrs.UpsertInt(conventions.AttributeHTTPResponseContentLength, int64(*resp.ContentLength))
-				if (*resp.Status < 200 || *resp.Status > 299) && seg.Cause != nil {
+				if otStatus != otlptrace.Status_Ok && seg.Cause != nil {
 					addCause(seg, span)
 				}
 			}
@@ -61,6 +68,46 @@ func addHTTPAndCause(seg *tracesegment.Segment, span *pdata.Span) {
 	}
 
 	return
+}
+
+var statusMap = map[int]otlptrace.Status_StatusCode{
+	400: otlptrace.Status_InvalidArgument,
+	401: otlptrace.Status_Unauthenticated,
+	403: otlptrace.Status_PermissionDenied,
+	404: otlptrace.Status_NotFound,
+	408: otlptrace.Status_DeadlineExceeded,
+	409: otlptrace.Status_AlreadyExists,
+	412: otlptrace.Status_FailedPrecondition,
+	416: otlptrace.Status_OutOfRange,
+	429: otlptrace.Status_ResourceExhausted,
+	500: otlptrace.Status_InternalError,
+	501: otlptrace.Status_Unimplemented,
+	503: otlptrace.Status_Unavailable,
+}
+
+func httpStatusToOTStatus(s int) otlptrace.Status_StatusCode {
+	// references:
+	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+	// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+
+	// these otlp status are not mapped:
+	// Status_Cancelled
+	// Status_Aborted
+	// Status_DataLoss
+
+	c, found := statusMap[s]
+	if found {
+		return c
+	}
+	if s > 200 || s < 300 {
+		return otlptrace.Status_Ok
+	} else if s > 400 && s < 500 {
+		return otlptrace.Status_InvalidArgument
+	} else if s > 500 && s < 600 {
+		return otlptrace.Status_InternalError
+	}
+
+	return otlptrace.Status_UnknownError
 }
 
 func addCause(seg *tracesegment.Segment, span *pdata.Span) {
@@ -71,7 +118,6 @@ func addCause(seg *tracesegment.Segment, span *pdata.Span) {
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/cause.go#L74
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/cause.go#L112
 		// so we can only pass this as part of the status message as a fallback mechanism
-		span.Status().InitEmpty()
 		span.Status().SetMessage(*seg.Cause.ExceptionID)
 	case tracesegment.CauseTypeObject:
 		evts := span.Events()

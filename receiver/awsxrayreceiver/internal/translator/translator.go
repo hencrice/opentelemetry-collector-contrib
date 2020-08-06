@@ -125,7 +125,10 @@ func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pd
 	addAWSToSpan(seg.AWS, &attrs)
 	addSQLToSpan(seg.SQL, &attrs)
 
-	// TODO: handle annotations and metadata
+	// TODO: transform the `metadata` field once X-Ray exporter
+	// figures out how they are going to unmarshal it from otlp
+	// back to X-Ray segment format
+	addAnnotations(seg.Annotations, &attrs)
 
 	return nil
 }
