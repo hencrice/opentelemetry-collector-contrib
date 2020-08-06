@@ -17,8 +17,9 @@ package translator
 import (
 	"fmt"
 
-	expTrans "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter/translator"
 	"go.opentelemetry.io/collector/consumer/pdata"
+
+	expTrans "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter/translator"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )

@@ -195,7 +195,7 @@ var RawExpectedSegmentForInstrumentedApp = Segment{
 				"DDB.DescribeExistingTableAndPutToMissingTable.Annotation": "anno",
 			},
 			Metadata: map[string]map[string]interface{}{
-				"default": map[string]interface{}{
+				"default": {
 					"DDB.DescribeExistingTableAndPutToMissingTable.AddMetadata": "meta",
 				},
 			},
@@ -238,7 +238,7 @@ var RawExpectedSegmentForInstrumentedApp = Segment{
 									StartTime: aws.Float64(1596566305.5357504),
 									EndTime:   aws.Float64(1596566305.575329),
 									Metadata: map[string]map[string]interface{}{
-										"http": map[string]interface{}{
+										"http": {
 											"connection": map[string]interface{}{
 												"reused":   false,
 												"was_idle": false,
@@ -252,7 +252,7 @@ var RawExpectedSegmentForInstrumentedApp = Segment{
 											StartTime: aws.Float64(1596566305.5357957),
 											EndTime:   aws.Float64(1596566305.5373216),
 											Metadata: map[string]map[string]interface{}{
-												"http": map[string]interface{}{
+												"http": {
 													"dns": map[string]interface{}{
 														"addresses": []interface{}{
 															map[string]interface{}{
@@ -271,7 +271,7 @@ var RawExpectedSegmentForInstrumentedApp = Segment{
 											StartTime: aws.Float64(1596566305.5373297),
 											EndTime:   aws.Float64(1596566305.537964),
 											Metadata: map[string]map[string]interface{}{
-												"http": map[string]interface{}{
+												"http": {
 													"connect": map[string]interface{}{
 														"network": "tcp",
 													},
@@ -284,7 +284,7 @@ var RawExpectedSegmentForInstrumentedApp = Segment{
 											StartTime: aws.Float64(1596566305.5380135),
 											EndTime:   aws.Float64(1596566305.5753162),
 											Metadata: map[string]map[string]interface{}{
-												"http": map[string]interface{}{
+												"http": {
 													"tls": map[string]interface{}{
 														"cipher_suite":                  49199.0,
 														"did_resume":                    false,
