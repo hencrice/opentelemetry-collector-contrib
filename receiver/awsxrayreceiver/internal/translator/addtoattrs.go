@@ -40,3 +40,9 @@ func addString(val *string, attrKey string, attrs *pdata.AttributeMap) {
 		attrs.UpsertString(attrKey, *val)
 	}
 }
+
+func addInt(val *int, attrKey string, attrs *pdata.AttributeMap) {
+	if val != nil {
+		attrs.UpsertInt(attrKey, int64(*val))
+	}
+}

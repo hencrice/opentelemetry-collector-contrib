@@ -51,7 +51,7 @@ func addHTTPAndCause(seg *tracesegment.Segment, span *pdata.Span) {
 		}
 
 		if resp := seg.HTTP.Response; resp != nil {
-			if resp.Status != nil && resp.ContentLength != nil {
+			if resp.Status != nil {
 				span.Status().InitEmpty()
 				otStatus := httpStatusToOTStatus(*resp.Status)
 				// in X-Ray exporter, the segment status is set via
@@ -59,11 +59,12 @@ func addHTTPAndCause(seg *tracesegment.Segment, span *pdata.Span) {
 				// actually used
 				span.Status().SetCode(pdata.StatusCode(otStatus))
 				attrs.UpsertInt(conventions.AttributeHTTPStatusCode, int64(*resp.Status))
-				attrs.UpsertInt(conventions.AttributeHTTPResponseContentLength, int64(*resp.ContentLength))
 				if otStatus != otlptrace.Status_Ok && seg.Cause != nil {
 					addCause(seg, span)
 				}
 			}
+
+			addInt(resp.ContentLength, conventions.AttributeHTTPResponseContentLength, &attrs)
 		}
 	}
 

@@ -89,7 +89,7 @@ func TestTraceSegmentHeaderIsValidWrongFormatVersion(t *testing.T) {
 	assert.False(t, valid)
 }
 
-var RawExpectedSegmentForInstrumentedApp = Segment{
+var rawExpectedSegmentForInstrumentedApp = Segment{
 	Name:      aws.String("DDB"),
 	ID:        aws.String("88ad1df59cd7a7be"),
 	StartTime: aws.Float64(1596566305.535414),
@@ -581,7 +581,7 @@ var RawExpectedSegmentForInstrumentedApp = Segment{
 	},
 }
 
-var RawExpectedSegmentForInstrumentedServer = Segment{
+var rawExpectedSegmentForInstrumentedServer = Segment{
 	Name:      aws.String("SampleServer"),
 	ID:        aws.String("bda182a644eee9b3"),
 	StartTime: aws.Float64(1596648396.6399446),
@@ -623,7 +623,7 @@ func TestTraceBodyUnMarshalling(t *testing.T) {
 			verification: func(testCase string, actualSeg Segment, err error) {
 				assert.NoError(t, err, testCase+": JSON Unmarshalling should've succeeded")
 
-				assert.Equal(t, RawExpectedSegmentForInstrumentedApp,
+				assert.Equal(t, rawExpectedSegmentForInstrumentedApp,
 					actualSeg, testCase+": unmarshalled app segment is different from the expected")
 			},
 		},
@@ -702,7 +702,7 @@ func TestTraceBodyUnMarshalling(t *testing.T) {
 			verification: func(testCase string, actualSeg Segment, err error) {
 				assert.NoError(t, err, testCase+": JSON Unmarshalling should've succeeded")
 
-				assert.Equal(t, RawExpectedSegmentForInstrumentedServer,
+				assert.Equal(t, rawExpectedSegmentForInstrumentedServer,
 					actualSeg, testCase+": unmarshalled server segment is different from the expected")
 			},
 		},
