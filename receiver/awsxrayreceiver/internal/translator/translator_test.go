@@ -104,22 +104,42 @@ func TestTranslation(t *testing.T) {
 				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
 			},
 		},
-		{
-			testCase:   "TranslateInstrumentedClientSegment",
-			samplePath: path.Join("../../", "testdata", "rawsegment", "ddbSample.txt"),
-			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
-				return nil
-			},
-			propsPerSpan: func(seg *tracesegment.Segment) []perSpanProperties {
-				return nil
-			},
-			verification: func(testCase string,
-				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
-				assert.NoError(t, err, testCase+": translation should've succeeded")
-				assert.Equal(t, actualTraces.ResourceSpans().Len(), 1,
-					"one segment should translate to 1 ResourceSpans")
-			},
-		},
+		// {
+		// 	testCase:   "TranslateInstrumentedClientSegment",
+		// 	samplePath: path.Join("../../", "testdata", "rawsegment", "ddbSample.txt"),
+		// 	expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+		// 		attrs := make(map[string]pdata.AttributeValue)
+		// 		attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("aws")
+
+		// 		return attrs
+		// 	},
+		// 	propsPerSpan: func(seg *tracesegment.Segment) []perSpanProperties {
+		// 		rootSpanAttrs := make(map[string]pdata.AttributeValue)
+		// 		rootSpanAttrs[] = pdata.NewAttributeValueString()
+		// 		rootSpan := perSpanProperties{
+		// 			traceID:      *seg.TraceID,
+		// 			spanID:       *seg.ID,
+		// 			name:         *seg.Name,
+		// 			startTimeSec: *seg.StartTime,
+		// 			endTimeSec:   seg.EndTime,
+		// 			spanKind:     pdata.SpanKindInternal,
+		// 			// TODO: the span status does not seem to be correct
+		// 			spanStatus:   otlptrace.Status_OutOfRange,
+		// 			attrs:        rootSpanAttrs,
+		// 		}
+
+		// 		return []perSpanProperties{res}
+		// 	},
+		// 	verification: func(testCase string,
+		// 		expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+		// 		assert.NoError(t, err, testCase+": translation should've succeeded")
+		// 		assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
+		// 			"one segment should translate to 1 ResourceSpans")
+
+		// 		actualRs := actualTraces.ResourceSpans().At(0)
+		// 		compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
+		// 	},
+		// },
 	}
 
 	for _, tc := range tests {

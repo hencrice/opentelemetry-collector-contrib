@@ -1,4 +1,4 @@
-// Copyright 2019, OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package translator
 import (
 	"encoding/json"
 
+	otlptrace "github.com/open-telemetry/opentelemetry-proto/gen/go/trace/v1"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
 
@@ -69,7 +70,7 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 	// TraceID of the root segment in because embedded subsegments
 	// do not have that information, but it's needed after we flatten
 	// the embedded subsegment to generate independent child spans.
-	_, err = segToSpans(&seg, seg.TraceID, nil, &spans, 0)
+	_, _, err = segToSpans(&seg, seg.TraceID, nil, &spans, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -77,28 +78,42 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 	return &traceData, nil
 }
 
-func segToSpans(seg *tracesegment.Segment, traceID, parentID *string, spans *pdata.SpanSlice, startingIndex int) (int, error) {
+func segToSpans(seg *tracesegment.Segment,
+	traceID, parentID *string,
+	spans *pdata.SpanSlice, startingIndex int) (int, *pdata.Span, error) {
+
 	span := spans.At(startingIndex)
 
 	err := populateSpan(seg, traceID, parentID, &span)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	startingIndexForSubsegment := 1 + startingIndex
+	var populatedChildSpan *pdata.Span
 	for _, s := range seg.Subsegments {
-		startingIndexForSubsegment, err = segToSpans(&s,
+		startingIndexForSubsegment, populatedChildSpan, err = segToSpans(&s,
 			traceID, seg.ID,
 			spans, startingIndexForSubsegment)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
+		}
+		if seg.Cause != nil &&
+			populatedChildSpan.Status().Code() != pdata.StatusCode(otlptrace.Status_Ok) {
+			// if seg.Cause is not nil, then one of the subsegments must contain a
+			// non-nil Cause as well.
+			span.Status().SetCode(populatedChildSpan.Status().Code())
 		}
 	}
 
-	return startingIndexForSubsegment, nil
+	return startingIndexForSubsegment, &span, nil
 }
 
-func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pdata.Span) error {
+func populateSpan(
+	seg *tracesegment.Segment,
+	traceID, parentID *string,
+	span *pdata.Span) error {
+
 	attrs := span.Attributes()
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
@@ -121,7 +136,8 @@ func populateSpan(seg *tracesegment.Segment, traceID, parentID *string, span *pd
 	addBool(seg.InProgress, AWSXRayInProgressAttribute, &attrs)
 	addString(seg.User, conventions.AttributeEnduserID, &attrs)
 
-	addHTTPAndCause(seg, span)
+	addHTTP(seg, span)
+	addCause(seg, span)
 	addAWSToSpan(seg.AWS, &attrs)
 	addSQLToSpan(seg.SQL, &attrs)
 

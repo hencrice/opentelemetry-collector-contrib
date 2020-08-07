@@ -25,23 +25,25 @@ import (
 )
 
 func addSQLToSpan(sql *tracesegment.SQLData, attrs *pdata.AttributeMap) error {
-	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/sql.go#L33
-	if sql != nil {
-		if sql.URL != nil {
-			dbURL, dbName, err := splitSQLURL(*sql.URL)
-			if err != nil {
-				return err
-			}
-			attrs.UpsertString(conventions.AttributeDBConnectionString, dbURL)
-			attrs.UpsertString(conventions.AttributeDBName, dbName)
-		}
-		// not handling sql.ConnectionString for now because the X-Ray exporter
-		// does not support it
-
-		addString(sql.DatabaseType, conventions.AttributeDBSystem, attrs)
-		addString(sql.SanitizedQuery, conventions.AttributeDBStatement, attrs)
-		addString(sql.User, conventions.AttributeDBUser, attrs)
+	if sql == nil {
+		return nil
 	}
+
+	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/sql.go#L33
+	if sql.URL != nil {
+		dbURL, dbName, err := splitSQLURL(*sql.URL)
+		if err != nil {
+			return err
+		}
+		attrs.UpsertString(conventions.AttributeDBConnectionString, dbURL)
+		attrs.UpsertString(conventions.AttributeDBName, dbName)
+	}
+	// not handling sql.ConnectionString for now because the X-Ray exporter
+	// does not support it
+
+	addString(sql.DatabaseType, conventions.AttributeDBSystem, attrs)
+	addString(sql.SanitizedQuery, conventions.AttributeDBStatement, attrs)
+	addString(sql.User, conventions.AttributeDBUser, attrs)
 	return nil
 }
 
