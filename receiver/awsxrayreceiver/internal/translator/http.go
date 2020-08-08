@@ -15,9 +15,9 @@
 package translator
 
 import (
-	otlptrace "github.com/open-telemetry/opentelemetry-proto/gen/go/trace/v1"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
+	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/tracesegment"
 )
@@ -49,7 +49,7 @@ func addHTTP(seg *tracesegment.Segment, span *pdata.Span) {
 
 	if resp := seg.HTTP.Response; resp != nil {
 		if resp.Status != nil {
-			otStatus := httpStatusToOTStatus(*resp.Status)
+			otStatus := tracetranslator.OCStatusCodeFromHTTP(int32(*resp.Status))
 			// in X-Ray exporter, the segment status is set via
 			// span attributes, the status code here is not
 			// actually used
@@ -60,45 +60,4 @@ func addHTTP(seg *tracesegment.Segment, span *pdata.Span) {
 		addInt(resp.ContentLength, conventions.AttributeHTTPResponseContentLength, &attrs)
 	}
 
-}
-
-var statusMap = map[int]otlptrace.Status_StatusCode{
-	200: otlptrace.Status_Ok,
-	400: otlptrace.Status_InvalidArgument,
-	401: otlptrace.Status_Unauthenticated,
-	403: otlptrace.Status_PermissionDenied,
-	404: otlptrace.Status_NotFound,
-	408: otlptrace.Status_DeadlineExceeded,
-	409: otlptrace.Status_AlreadyExists,
-	412: otlptrace.Status_FailedPrecondition,
-	416: otlptrace.Status_OutOfRange,
-	429: otlptrace.Status_ResourceExhausted,
-	500: otlptrace.Status_InternalError,
-	501: otlptrace.Status_Unimplemented,
-	503: otlptrace.Status_Unavailable,
-}
-
-func httpStatusToOTStatus(s int) otlptrace.Status_StatusCode {
-	// references:
-	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
-	// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-
-	// these otlp status are not mapped:
-	// Status_Cancelled
-	// Status_Aborted
-	// Status_DataLoss
-
-	c, found := statusMap[s]
-	if found {
-		return c
-	}
-	if s > 200 || s < 300 {
-		return otlptrace.Status_Ok
-	} else if s > 400 && s < 500 {
-		return otlptrace.Status_InvalidArgument
-	} else if s > 500 && s < 600 {
-		return otlptrace.Status_InternalError
-	}
-
-	return otlptrace.Status_UnknownError
 }

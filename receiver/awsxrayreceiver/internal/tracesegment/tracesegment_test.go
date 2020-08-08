@@ -90,19 +90,14 @@ var rawExpectedSegmentForInstrumentedApp = Segment{
 	User:      aws.String("xraysegmentdump"),
 	Cause: &CauseData{
 		Type: CauseTypeObject,
-		// ExceptionID: nil
 		causeObject: causeObject{
 			WorkingDirectory: aws.String("/home/ubuntu/opentelemetry-collector-contrib/receiver/awsxrayreceiver/testdata/rawsegment/sampleapp"),
-			// Paths: nil
 			Exceptions: []Exception{
 				{
 					ID:      aws.String("3e9e11e3ab3fba60"),
 					Message: aws.String("ResourceNotFoundException: Requested resource not found"),
 					Type:    aws.String("dynamodb.ResourceNotFoundException"),
 					Remote:  aws.Bool(true),
-					// Truncated: nil
-					// Skipped: nil
-					// Cause: nil
 					Stack: []StackFrame{
 						{
 							Path:  aws.String("runtime/proc.go"),
@@ -138,19 +133,14 @@ var rawExpectedSegmentForInstrumentedApp = Segment{
 			Fault:     aws.Bool(true),
 			Cause: &CauseData{
 				Type: CauseTypeObject,
-				// ExceptionID: nil
 				causeObject: causeObject{
 					WorkingDirectory: aws.String("/home/ubuntu/opentelemetry-collector-contrib/receiver/awsxrayreceiver/testdata/rawsegment/sampleapp"),
-					// Paths: nil
 					Exceptions: []Exception{
 						{
 							ID:      aws.String("e2ba8a2109451f5b"),
 							Message: aws.String("ResourceNotFoundException: Requested resource not found"),
 							Type:    aws.String("dynamodb.ResourceNotFoundException"),
 							Remote:  aws.Bool(true),
-							// Truncated: nil
-							// Skipped: nil
-							// Cause: nil
 							Stack: []StackFrame{
 								{
 									Path:  aws.String("github.com/aws/aws-xray-sdk-go@v1.1.0/xray/capture.go"),
@@ -325,9 +315,6 @@ var rawExpectedSegmentForInstrumentedApp = Segment{
 									Message: aws.String("ResourceNotFoundException: Requested resource not found"),
 									Type:    aws.String("dynamodb.ResourceNotFoundException"),
 									Remote:  aws.Bool(true),
-									// Truncated: nil
-									// Skipped: nil
-									// Cause: nil
 									Stack: []StackFrame{
 										{
 											Path:  aws.String("github.com/aws/aws-sdk-go@v1.33.9/aws/request/handlers.go"),

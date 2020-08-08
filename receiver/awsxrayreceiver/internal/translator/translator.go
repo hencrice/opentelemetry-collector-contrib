@@ -101,8 +101,15 @@ func segToSpans(seg *tracesegment.Segment,
 		if seg.Cause != nil &&
 			populatedChildSpan.Status().Code() != pdata.StatusCode(otlptrace.Status_Ok) {
 			// if seg.Cause is not nil, then one of the subsegments must contain a
-			// non-nil Cause as well.
-			span.Status().SetCode(populatedChildSpan.Status().Code())
+			// HTTP error code. ALso, span.Status().Code() is already
+			// set to `otlptrace.Status_UnknownError` by `addCause()` in
+			// `populateSpan()` above, so here we are just trying to figure out
+			// whether we can get a event more specific error code.
+
+			if span.Status().Code() != pdata.StatusCode(otlptrace.Status_UnknownError) {
+				// update the error code to a possibly more specific code
+				span.Status().SetCode(populatedChildSpan.Status().Code())
+			}
 		}
 	}
 

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	expTrans "github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter/translator"
 	otlptrace "github.com/open-telemetry/opentelemetry-proto/gen/go/trace/v1"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/consumer/pdata"
@@ -53,7 +54,7 @@ func TestTranslation(t *testing.T) {
 		testCase              string
 		samplePath            string
 		expectedResourceAttrs func(seg *tracesegment.Segment) map[string]pdata.AttributeValue
-		propsPerSpan          func(seg *tracesegment.Segment) []perSpanProperties
+		propsPerSpan          func(testCase string, t *testing.T, seg *tracesegment.Segment) []perSpanProperties
 		verification          func(testCase string,
 			expectedRs *pdata.ResourceSpans,
 			actualTraces *pdata.Traces,
@@ -67,7 +68,7 @@ func TestTranslation(t *testing.T) {
 				attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("aws")
 				return attrs
 			},
-			propsPerSpan: func(seg *tracesegment.Segment) []perSpanProperties {
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
 				attrs := make(map[string]pdata.AttributeValue)
 				attrs[conventions.AttributeHTTPMethod] = pdata.NewAttributeValueString(
 					*seg.HTTP.Request.Method)
@@ -104,42 +105,347 @@ func TestTranslation(t *testing.T) {
 				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
 			},
 		},
-		// {
-		// 	testCase:   "TranslateInstrumentedClientSegment",
-		// 	samplePath: path.Join("../../", "testdata", "rawsegment", "ddbSample.txt"),
-		// 	expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
-		// 		attrs := make(map[string]pdata.AttributeValue)
-		// 		attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("aws")
+		{
+			testCase:   "TranslateInstrumentedClientSegment",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "ddbSample.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				attrs := make(map[string]pdata.AttributeValue)
+				attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("aws")
 
-		// 		return attrs
-		// 	},
-		// 	propsPerSpan: func(seg *tracesegment.Segment) []perSpanProperties {
-		// 		rootSpanAttrs := make(map[string]pdata.AttributeValue)
-		// 		rootSpanAttrs[] = pdata.NewAttributeValueString()
-		// 		rootSpan := perSpanProperties{
-		// 			traceID:      *seg.TraceID,
-		// 			spanID:       *seg.ID,
-		// 			name:         *seg.Name,
-		// 			startTimeSec: *seg.StartTime,
-		// 			endTimeSec:   seg.EndTime,
-		// 			spanKind:     pdata.SpanKindInternal,
-		// 			// TODO: the span status does not seem to be correct
-		// 			spanStatus:   otlptrace.Status_OutOfRange,
-		// 			attrs:        rootSpanAttrs,
-		// 		}
+				return attrs
+			},
+			propsPerSpan: func(testCase string, t *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				rootSpanAttrs := make(map[string]pdata.AttributeValue)
+				rootSpanAttrs[conventions.AttributeEnduserID] = pdata.NewAttributeValueString(*seg.User)
+				rootSpanEvts := initExceptionEvents(seg)
+				assert.Len(t, rootSpanEvts, 1, testCase+": rootSpanEvts has incorrect size")
+				rootSpan := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_InvalidArgument,
+					eventsProps:  rootSpanEvts,
+					attrs:        rootSpanAttrs,
+				}
 
-		// 		return []perSpanProperties{res}
-		// 	},
-		// 	verification: func(testCase string,
-		// 		expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
-		// 		assert.NoError(t, err, testCase+": translation should've succeeded")
-		// 		assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
-		// 			"one segment should translate to 1 ResourceSpans")
+				// this is the subsegment with ID that starts with 7df6
+				subseg7df6 := seg.Subsegments[0]
+				childSpan7df6Attrs := make(map[string]pdata.AttributeValue)
+				for k, v := range subseg7df6.Annotations {
+					childSpan7df6Attrs[k] = pdata.NewAttributeValueString(
+						v.(string))
+				}
+				assert.Len(t, childSpan7df6Attrs, 1, testCase+": childSpan7df6Attrs has incorrect size")
+				childSpan7df6Evts := initExceptionEvents(&subseg7df6)
+				assert.Len(t, childSpan7df6Evts, 1, testCase+": childSpan7df6Evts has incorrect size")
+				childSpan7df6 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg7df6.ID,
+					parentSpanID: &rootSpan.spanID,
+					name:         *subseg7df6.Name,
+					startTimeSec: *subseg7df6.StartTime,
+					endTimeSec:   subseg7df6.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_InvalidArgument,
+					eventsProps:  childSpan7df6Evts,
+					attrs:        childSpan7df6Attrs,
+				}
 
-		// 		actualRs := actualTraces.ResourceSpans().At(0)
-		// 		compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
-		// 	},
-		// },
+				subseg7318 := seg.Subsegments[0].Subsegments[0]
+				childSpan7318Attrs := make(map[string]pdata.AttributeValue)
+				childSpan7318Attrs[expTrans.AWSServiceAttribute] = pdata.NewAttributeValueString(
+					*subseg7318.Name)
+				childSpan7318Attrs[conventions.AttributeHTTPStatusCode] = pdata.NewAttributeValueInt(
+					int64(*subseg7318.HTTP.Response.Status))
+				childSpan7318Attrs[conventions.AttributeHTTPResponseContentLength] = pdata.NewAttributeValueInt(
+					int64(*subseg7318.HTTP.Response.ContentLength))
+				childSpan7318Attrs[expTrans.AWSOperationAttribute] = pdata.NewAttributeValueString(
+					*subseg7318.AWS.Operation)
+				childSpan7318Attrs[expTrans.AWSRegionAttribute] = pdata.NewAttributeValueString(
+					*subseg7318.AWS.RemoteRegion)
+				childSpan7318Attrs[expTrans.AWSRequestIDAttribute] = pdata.NewAttributeValueString(
+					*subseg7318.AWS.RequestID)
+				childSpan7318Attrs[expTrans.AWSTableNameAttribute] = pdata.NewAttributeValueString(
+					*subseg7318.AWS.TableName)
+
+				childSpan7318 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg7318.ID,
+					parentSpanID: &childSpan7df6.spanID,
+					name:         *subseg7318.Name,
+					startTimeSec: *subseg7318.StartTime,
+					endTimeSec:   subseg7318.EndTime,
+					spanKind:     pdata.SpanKindCLIENT,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        childSpan7318Attrs,
+				}
+
+				subseg0239 := seg.Subsegments[0].Subsegments[0].Subsegments[0]
+				childSpan0239 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg0239.ID,
+					parentSpanID: &childSpan7318.spanID,
+					name:         *subseg0239.Name,
+					startTimeSec: *subseg0239.StartTime,
+					endTimeSec:   subseg0239.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subseg23cf := seg.Subsegments[0].Subsegments[0].Subsegments[1]
+				childSpan23cf := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg23cf.ID,
+					parentSpanID: &childSpan7318.spanID,
+					name:         *subseg23cf.Name,
+					startTimeSec: *subseg23cf.StartTime,
+					endTimeSec:   subseg23cf.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subseg417b := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0]
+				childSpan417b := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg417b.ID,
+					parentSpanID: &childSpan23cf.spanID,
+					name:         *subseg417b.Name,
+					startTimeSec: *subseg417b.StartTime,
+					endTimeSec:   subseg417b.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subseg0cab := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0].Subsegments[0]
+				childSpan0cab := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg0cab.ID,
+					parentSpanID: &childSpan417b.spanID,
+					name:         *subseg0cab.Name,
+					startTimeSec: *subseg0cab.StartTime,
+					endTimeSec:   subseg0cab.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subsegF8db := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0].Subsegments[1]
+				childSpanF8db := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subsegF8db.ID,
+					parentSpanID: &childSpan417b.spanID,
+					name:         *subsegF8db.Name,
+					startTimeSec: *subsegF8db.StartTime,
+					endTimeSec:   subsegF8db.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subsegE2de := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0].Subsegments[2]
+				childSpanE2de := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subsegE2de.ID,
+					parentSpanID: &childSpan417b.spanID,
+					name:         *subsegE2de.Name,
+					startTimeSec: *subsegE2de.StartTime,
+					endTimeSec:   subsegE2de.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subsegA70b := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[1]
+				childSpanA70b := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subsegA70b.ID,
+					parentSpanID: &childSpan23cf.spanID,
+					name:         *subsegA70b.Name,
+					startTimeSec: *subsegA70b.StartTime,
+					endTimeSec:   subsegA70b.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subsegC053 := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[2]
+				childSpanC053 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subsegC053.ID,
+					parentSpanID: &childSpan23cf.spanID,
+					name:         *subsegC053.Name,
+					startTimeSec: *subsegC053.StartTime,
+					endTimeSec:   subsegC053.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subseg5fca := seg.Subsegments[0].Subsegments[0].Subsegments[2]
+				childSpan5fca := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg5fca.ID,
+					parentSpanID: &childSpan7318.spanID,
+					name:         *subseg5fca.Name,
+					startTimeSec: *subseg5fca.StartTime,
+					endTimeSec:   subseg5fca.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subseg7163 := seg.Subsegments[0].Subsegments[1]
+				childSpan7163Attrs := make(map[string]pdata.AttributeValue)
+				childSpan7163Attrs[expTrans.AWSServiceAttribute] = pdata.NewAttributeValueString(
+					*subseg7163.Name)
+				childSpan7163Attrs[conventions.AttributeHTTPStatusCode] = pdata.NewAttributeValueInt(
+					int64(*subseg7163.HTTP.Response.Status))
+				childSpan7163Attrs[conventions.AttributeHTTPResponseContentLength] = pdata.NewAttributeValueInt(
+					int64(*subseg7163.HTTP.Response.ContentLength))
+				childSpan7163Attrs[expTrans.AWSOperationAttribute] = pdata.NewAttributeValueString(
+					*subseg7163.AWS.Operation)
+				childSpan7163Attrs[expTrans.AWSRegionAttribute] = pdata.NewAttributeValueString(
+					*subseg7163.AWS.RemoteRegion)
+				childSpan7163Attrs[expTrans.AWSRequestIDAttribute] = pdata.NewAttributeValueString(
+					*subseg7163.AWS.RequestID)
+				childSpan7163Attrs[expTrans.AWSTableNameAttribute] = pdata.NewAttributeValueString(
+					*subseg7163.AWS.TableName)
+
+				childSpan7163Evts := initExceptionEvents(&subseg7163)
+				assert.Len(t, childSpan7163Evts, 1, testCase+": childSpan7163Evts has incorrect size")
+				childSpan7163 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg7163.ID,
+					parentSpanID: &childSpan7df6.spanID,
+					name:         *subseg7163.Name,
+					startTimeSec: *subseg7163.StartTime,
+					endTimeSec:   subseg7163.EndTime,
+					spanKind:     pdata.SpanKindCLIENT,
+					spanStatus:   otlptrace.Status_InvalidArgument,
+					eventsProps:  childSpan7163Evts,
+					attrs:        childSpan7318Attrs,
+				}
+
+				subseg9da0 := seg.Subsegments[0].Subsegments[1].Subsegments[0]
+				childSpan9da0 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg9da0.ID,
+					parentSpanID: &childSpan7163.spanID,
+					name:         *subseg9da0.Name,
+					startTimeSec: *subseg9da0.StartTime,
+					endTimeSec:   subseg9da0.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subseg56b1 := seg.Subsegments[0].Subsegments[1].Subsegments[1]
+				childSpan56b1Evts := initExceptionEvents(&subseg56b1)
+				assert.Len(t, childSpan56b1Evts, 1, testCase+": childSpan56b1Evts has incorrect size")
+				childSpan56b1 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg56b1.ID,
+					parentSpanID: &childSpan7163.spanID,
+					name:         *subseg56b1.Name,
+					startTimeSec: *subseg56b1.StartTime,
+					endTimeSec:   subseg56b1.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_UnknownError,
+					eventsProps:  childSpan56b1Evts,
+					attrs:        nil,
+				}
+
+				subseg6f90 := seg.Subsegments[0].Subsegments[1].Subsegments[1].Subsegments[0]
+				childSpan6f90 := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subseg6f90.ID,
+					parentSpanID: &childSpan56b1.spanID,
+					name:         *subseg6f90.Name,
+					startTimeSec: *subseg6f90.StartTime,
+					endTimeSec:   subseg6f90.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subsegAcfa := seg.Subsegments[0].Subsegments[1].Subsegments[1].Subsegments[1]
+				childSpanAcfa := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subsegAcfa.ID,
+					parentSpanID: &childSpan56b1.spanID,
+					name:         *subsegAcfa.Name,
+					startTimeSec: *subsegAcfa.StartTime,
+					endTimeSec:   subsegAcfa.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_Ok,
+					eventsProps:  nil,
+					attrs:        nil,
+				}
+
+				subsegBa8d := seg.Subsegments[0].Subsegments[1].Subsegments[2]
+				childSpanBa8dEvts := initExceptionEvents(&subsegBa8d)
+				assert.Len(t, childSpanBa8dEvts, 1, testCase+": childSpanBa8dEvts has incorrect size")
+				childSpanBa8d := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *subsegBa8d.ID,
+					parentSpanID: &childSpan7163.spanID,
+					name:         *subsegBa8d.Name,
+					startTimeSec: *subsegBa8d.StartTime,
+					endTimeSec:   subsegBa8d.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus:   otlptrace.Status_UnknownError,
+					eventsProps:  childSpanBa8dEvts,
+					attrs:        nil,
+				}
+
+				return []perSpanProperties{rootSpan,
+					childSpan7df6,
+					childSpan7318,
+					childSpan0239,
+					childSpan23cf,
+					childSpan417b,
+					childSpan0cab,
+					childSpanF8db,
+					childSpanE2de,
+					childSpanA70b,
+					childSpanC053,
+					childSpan5fca,
+					childSpan7163,
+					childSpan9da0,
+					childSpan56b1,
+					childSpan6f90,
+					childSpanAcfa,
+					childSpanBa8d,
+				}
+			},
+			verification: func(testCase string,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.NoError(t, err, testCase+": translation should've succeeded")
+				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
+					"one segment should translate to 1 ResourceSpans")
+
+				actualRs := actualTraces.ResourceSpans().At(0)
+				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -159,12 +465,30 @@ func TestTranslation(t *testing.T) {
 		expectedRs := initResourceSpans(
 			&actualSeg,
 			tc.expectedResourceAttrs(&actualSeg),
-			tc.propsPerSpan(&actualSeg),
+			tc.propsPerSpan(tc.testCase, t, &actualSeg),
 		)
 
 		traces, err := ToTraces(body)
 		tc.verification(tc.testCase, expectedRs, traces, err)
 	}
+}
+
+func initExceptionEvents(expectedSeg *tracesegment.Segment) []eventProps {
+	res := make([]eventProps, 0, len(expectedSeg.Cause.Exceptions))
+	for _, excp := range expectedSeg.Cause.Exceptions {
+		attrs := make(map[string]pdata.AttributeValue)
+		attrs[conventions.AttributeExceptionType] = pdata.NewAttributeValueString(
+			*excp.Type)
+		attrs[conventions.AttributeExceptionMessage] = pdata.NewAttributeValueString(
+			*excp.Message)
+		attrs[conventions.AttributeExceptionStacktrace] = pdata.NewAttributeValueString(
+			convertStackFramesToStackTraceStr(excp.Stack))
+		res = append(res, eventProps{
+			name:  conventions.AttributeExceptionEventName,
+			attrs: attrs,
+		})
+	}
+	return res
 }
 
 func initResourceSpans(expectedSeg *tracesegment.Segment,
