@@ -37,16 +37,22 @@ func addAWSToResource(aws *tracesegment.AWSData, attrs *pdata.AttributeMap) {
 	attrs.UpsertString(conventions.AttributeCloudProvider, "aws")
 	addString(aws.AccountID, conventions.AttributeCloudAccount, attrs)
 	if ec2 := aws.EC2; ec2 != nil {
-		attrs.UpsertString(conventions.AttributeCloudZone, *ec2.AvailabilityZone)
-		attrs.UpsertString(conventions.AttributeHostID, *ec2.InstanceID)
-		attrs.UpsertString(conventions.AttributeHostType, *ec2.InstanceSize)
-		attrs.UpsertString(conventions.AttributeHostImageID, *ec2.AmiID)
-	} else if ecs := aws.ECS; ecs != nil {
-		attrs.UpsertString(conventions.AttributeContainerName, *ecs.ContainerName)
-	} else if bs := aws.Beanstalk; bs != nil {
-		attrs.UpsertString(conventions.AttributeServiceNamespace, *bs.Environment)
-		attrs.UpsertString(conventions.AttributeServiceInstance, strconv.FormatInt(*bs.DeploymentID, 10))
-		attrs.UpsertString(conventions.AttributeServiceVersion, *bs.VersionLabel)
+		addString(ec2.AvailabilityZone, conventions.AttributeCloudZone, attrs)
+		addString(ec2.InstanceID, conventions.AttributeHostID, attrs)
+		addString(ec2.InstanceSize, conventions.AttributeHostType, attrs)
+		addString(ec2.AmiID, conventions.AttributeHostImageID, attrs)
+	}
+
+	if ecs := aws.ECS; ecs != nil {
+		addString(ecs.ContainerName, conventions.AttributeContainerName, attrs)
+	}
+
+	if bs := aws.Beanstalk; bs != nil {
+		addString(bs.Environment, conventions.AttributeServiceNamespace, attrs)
+		if bs.DeploymentID != nil {
+			attrs.UpsertString(conventions.AttributeServiceInstance, strconv.FormatInt(*bs.DeploymentID, 10))
+		}
+		addString(bs.VersionLabel, conventions.AttributeServiceVersion, attrs)
 	}
 }
 

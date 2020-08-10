@@ -39,9 +39,14 @@ type perSpanProperties struct {
 	startTimeSec float64
 	endTimeSec   *float64
 	spanKind     pdata.SpanKind
-	spanStatus   otlptrace.Status_StatusCode
+	spanStatus   spanSt
 	eventsProps  []eventProps
 	attrs        map[string]pdata.AttributeValue
+}
+
+type spanSt struct {
+	message string
+	code    otlptrace.Status_StatusCode
 }
 
 type eventProps struct {
@@ -50,9 +55,9 @@ type eventProps struct {
 }
 
 func TestTranslation(t *testing.T) {
-	var populateDefaultServerSpanAttrs func(
+	var defaultServerSpanAttrs func(
 		seg *tracesegment.Segment,
-	) *perSpanProperties = func(seg *tracesegment.Segment) *perSpanProperties {
+	) map[string]pdata.AttributeValue = func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
 		attrs := make(map[string]pdata.AttributeValue)
 		attrs[conventions.AttributeHTTPMethod] = pdata.NewAttributeValueString(
 			*seg.HTTP.Request.Method)
@@ -67,17 +72,7 @@ func TestTranslation(t *testing.T) {
 		attrs[conventions.AttributeHTTPURL] = pdata.NewAttributeValueString(
 			*seg.HTTP.Request.URL)
 
-		res := perSpanProperties{
-			traceID:      *seg.TraceID,
-			spanID:       *seg.ID,
-			name:         *seg.Name,
-			startTimeSec: *seg.StartTime,
-			endTimeSec:   seg.EndTime,
-			spanKind:     pdata.SpanKindSERVER,
-			spanStatus:   otlptrace.Status_Ok,
-			attrs:        attrs,
-		}
-		return &res
+		return attrs
 	}
 
 	tests := []struct {
@@ -99,8 +94,20 @@ func TestTranslation(t *testing.T) {
 				return attrs
 			},
 			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
-				res := populateDefaultServerSpanAttrs(seg)
-				return []perSpanProperties{*res}
+				attrs := defaultServerSpanAttrs(seg)
+				res := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindSERVER,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					attrs: attrs,
+				}
+				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
@@ -133,9 +140,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *seg.StartTime,
 					endTimeSec:   seg.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_InvalidArgument,
-					eventsProps:  rootSpanEvts,
-					attrs:        rootSpanAttrs,
+					spanStatus: spanSt{
+						code: otlptrace.Status_InvalidArgument,
+					},
+					eventsProps: rootSpanEvts,
+					attrs:       rootSpanAttrs,
 				}
 
 				// this is the subsegment with ID that starts with 7df6
@@ -156,9 +165,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg7df6.StartTime,
 					endTimeSec:   subseg7df6.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_InvalidArgument,
-					eventsProps:  childSpan7df6Evts,
-					attrs:        childSpan7df6Attrs,
+					spanStatus: spanSt{
+						code: otlptrace.Status_InvalidArgument,
+					},
+					eventsProps: childSpan7df6Evts,
+					attrs:       childSpan7df6Attrs,
 				}
 
 				subseg7318 := seg.Subsegments[0].Subsegments[0]
@@ -186,9 +197,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg7318.StartTime,
 					endTimeSec:   subseg7318.EndTime,
 					spanKind:     pdata.SpanKindCLIENT,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        childSpan7318Attrs,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       childSpan7318Attrs,
 				}
 
 				subseg0239 := seg.Subsegments[0].Subsegments[0].Subsegments[0]
@@ -200,9 +213,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg0239.StartTime,
 					endTimeSec:   subseg0239.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subseg23cf := seg.Subsegments[0].Subsegments[0].Subsegments[1]
@@ -214,9 +229,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg23cf.StartTime,
 					endTimeSec:   subseg23cf.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subseg417b := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0]
@@ -228,9 +245,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg417b.StartTime,
 					endTimeSec:   subseg417b.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subseg0cab := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0].Subsegments[0]
@@ -242,9 +261,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg0cab.StartTime,
 					endTimeSec:   subseg0cab.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subsegF8db := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0].Subsegments[1]
@@ -256,9 +277,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subsegF8db.StartTime,
 					endTimeSec:   subsegF8db.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subsegE2de := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[0].Subsegments[2]
@@ -270,9 +293,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subsegE2de.StartTime,
 					endTimeSec:   subsegE2de.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subsegA70b := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[1]
@@ -284,9 +309,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subsegA70b.StartTime,
 					endTimeSec:   subsegA70b.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subsegC053 := seg.Subsegments[0].Subsegments[0].Subsegments[1].Subsegments[2]
@@ -298,9 +325,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subsegC053.StartTime,
 					endTimeSec:   subsegC053.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subseg5fca := seg.Subsegments[0].Subsegments[0].Subsegments[2]
@@ -312,9 +341,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg5fca.StartTime,
 					endTimeSec:   subseg5fca.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subseg7163 := seg.Subsegments[0].Subsegments[1]
@@ -344,9 +375,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg7163.StartTime,
 					endTimeSec:   subseg7163.EndTime,
 					spanKind:     pdata.SpanKindCLIENT,
-					spanStatus:   otlptrace.Status_InvalidArgument,
-					eventsProps:  childSpan7163Evts,
-					attrs:        childSpan7163Attrs,
+					spanStatus: spanSt{
+						code: otlptrace.Status_InvalidArgument,
+					},
+					eventsProps: childSpan7163Evts,
+					attrs:       childSpan7163Attrs,
 				}
 
 				subseg9da0 := seg.Subsegments[0].Subsegments[1].Subsegments[0]
@@ -358,9 +391,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg9da0.StartTime,
 					endTimeSec:   subseg9da0.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subseg56b1 := seg.Subsegments[0].Subsegments[1].Subsegments[1]
@@ -374,9 +409,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg56b1.StartTime,
 					endTimeSec:   subseg56b1.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_UnknownError,
-					eventsProps:  childSpan56b1Evts,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_UnknownError,
+					},
+					eventsProps: childSpan56b1Evts,
+					attrs:       nil,
 				}
 
 				subseg6f90 := seg.Subsegments[0].Subsegments[1].Subsegments[1].Subsegments[0]
@@ -388,9 +425,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subseg6f90.StartTime,
 					endTimeSec:   subseg6f90.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subsegAcfa := seg.Subsegments[0].Subsegments[1].Subsegments[1].Subsegments[1]
@@ -402,9 +441,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subsegAcfa.StartTime,
 					endTimeSec:   subsegAcfa.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_Ok,
-					eventsProps:  nil,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					eventsProps: nil,
+					attrs:       nil,
 				}
 
 				subsegBa8d := seg.Subsegments[0].Subsegments[1].Subsegments[2]
@@ -418,9 +459,11 @@ func TestTranslation(t *testing.T) {
 					startTimeSec: *subsegBa8d.StartTime,
 					endTimeSec:   subsegBa8d.EndTime,
 					spanKind:     pdata.SpanKindINTERNAL,
-					spanStatus:   otlptrace.Status_UnknownError,
-					eventsProps:  childSpanBa8dEvts,
-					attrs:        nil,
+					spanStatus: spanSt{
+						code: otlptrace.Status_UnknownError,
+					},
+					eventsProps: childSpanBa8dEvts,
+					attrs:       nil,
 				}
 
 				return []perSpanProperties{rootSpan,
@@ -462,8 +505,20 @@ func TestTranslation(t *testing.T) {
 				return attrs
 			},
 			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
-				res := populateDefaultServerSpanAttrs(seg)
-				return []perSpanProperties{*res}
+				attrs := defaultServerSpanAttrs(seg)
+				res := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindSERVER,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					attrs: attrs,
+				}
+				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
@@ -476,16 +531,82 @@ func TestTranslation(t *testing.T) {
 			},
 		},
 		{
-			testCase:   "[aws] TranslateMissingAWSFieldSegment",
-			samplePath: path.Join("../../", "testdata", "rawsegment", "awsMissingAwsField.txt"),
+			testCase:   "[aws] TranslateEC2AWSFieldsSegment",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "awsValidAwsFields.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				attrs := make(map[string]pdata.AttributeValue)
+				attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("aws")
+				attrs[conventions.AttributeCloudAccount] = pdata.NewAttributeValueString(
+					*seg.AWS.AccountID)
+				attrs[conventions.AttributeCloudZone] = pdata.NewAttributeValueString(
+					*seg.AWS.EC2.AvailabilityZone)
+				attrs[conventions.AttributeHostID] = pdata.NewAttributeValueString(
+					*seg.AWS.EC2.InstanceID)
+				attrs[conventions.AttributeHostType] = pdata.NewAttributeValueString(
+					*seg.AWS.EC2.InstanceSize)
+				attrs[conventions.AttributeHostImageID] = pdata.NewAttributeValueString(
+					*seg.AWS.EC2.AmiID)
+				attrs[conventions.AttributeContainerName] = pdata.NewAttributeValueString(
+					*seg.AWS.ECS.ContainerName)
+				attrs[conventions.AttributeServiceNamespace] = pdata.NewAttributeValueString(
+					*seg.AWS.Beanstalk.Environment)
+				attrs[conventions.AttributeServiceInstance] = pdata.NewAttributeValueString(
+					"32")
+				attrs[conventions.AttributeServiceVersion] = pdata.NewAttributeValueString(
+					*seg.AWS.Beanstalk.VersionLabel)
+				return attrs
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				attrs := defaultServerSpanAttrs(seg)
+				attrs[expTrans.AWSAccountAttribute] = pdata.NewAttributeValueString(
+					*seg.AWS.AccountID)
+				res := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindSERVER,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					attrs: attrs,
+				}
+				return []perSpanProperties{res}
+			},
+			verification: func(testCase string,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.NoError(t, err, testCase+": translation should've succeeded")
+				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
+					testCase+": one segment should translate to 1 ResourceSpans")
+
+				actualRs := actualTraces.ResourceSpans().At(0)
+				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
+			},
+		},
+		{
+			testCase:   "TranslateCauseIsExceptionId",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "minCauseIsExceptionId.txt"),
 			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
 				attrs := make(map[string]pdata.AttributeValue)
 				attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("nonAWS")
 				return attrs
 			},
 			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
-				res := populateDefaultServerSpanAttrs(seg)
-				return []perSpanProperties{*res}
+				res := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindINTERNAL,
+					spanStatus: spanSt{
+						message: *seg.Cause.ExceptionID,
+						code:    otlptrace.Status_UnknownError,
+					},
+					attrs: nil,
+				}
+				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
@@ -593,7 +714,8 @@ func initResourceSpans(expectedSeg *tracesegment.Segment,
 		sp.SetKind(props.spanKind)
 		sp.SetTraceID(pdata.TraceID([]byte(props.traceID)))
 		sp.Status().InitEmpty()
-		sp.Status().SetCode(pdata.StatusCode(props.spanStatus))
+		sp.Status().SetMessage(props.spanStatus.message)
+		sp.Status().SetCode(pdata.StatusCode(props.spanStatus.code))
 
 		if len(props.eventsProps) > 0 {
 			sp.Events().Resize(len(props.eventsProps))
