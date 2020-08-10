@@ -31,17 +31,15 @@ const (
 )
 
 func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {
+	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L193
+	span.SetName(*seg.Name)
 	if seg.Namespace == nil {
-		span.SetName(*seg.Name)
 		span.SetKind(pdata.SpanKindINTERNAL)
 		return nil
 	}
 	// seg is a subsegment
 
 	attrs := span.Attributes()
-
-	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L193
-	span.SetName(*seg.Name)
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L197
 	// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/api.md#spankind
 	span.SetKind(pdata.SpanKindCLIENT)

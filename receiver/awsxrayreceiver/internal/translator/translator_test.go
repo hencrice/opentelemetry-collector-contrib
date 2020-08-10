@@ -618,6 +618,20 @@ func TestTranslation(t *testing.T) {
 				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
 			},
 		},
+		{
+			testCase:   "TranslateInvalidNamespace",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "invalidNamespace.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				return nil
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				return nil
+			},
+			verification: func(testCase string,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.EqualError(t, err, "unexpected namespace: invalidNs", testCase+": translation should've failed")
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -673,9 +687,9 @@ func initResourceSpans(expectedSeg *tracesegment.Segment,
 
 	rs := pdata.NewResourceSpans()
 	rs.InitEmpty()
+	rs.Resource().InitEmpty()
 
 	if len(resourceAttrs) > 0 {
-		rs.Resource().InitEmpty()
 		resourceAttrMap := pdata.NewAttributeMap()
 		resourceAttrMap.InitFromMap(resourceAttrs)
 		rs.Resource().Attributes().InitFromAttributeMap(resourceAttrMap)
