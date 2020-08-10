@@ -632,6 +632,49 @@ func TestTranslation(t *testing.T) {
 				assert.EqualError(t, err, "unexpected namespace: invalidNs", testCase+": translation should've failed")
 			},
 		},
+		{
+			testCase:   "TranslateIndepSubsegment",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "indepSubsegment.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				attrs := make(map[string]pdata.AttributeValue)
+				attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("nonAWS")
+				return attrs
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				attrs := make(map[string]pdata.AttributeValue)
+				attrs[conventions.AttributeHTTPMethod] = pdata.NewAttributeValueString(
+					*seg.HTTP.Request.Method)
+				attrs[conventions.AttributeHTTPStatusCode] = pdata.NewAttributeValueInt(
+					int64(*seg.HTTP.Response.Status))
+				attrs[conventions.AttributeHTTPURL] = pdata.NewAttributeValueString(
+					*seg.HTTP.Request.URL)
+				attrs[conventions.AttributeHTTPResponseContentLength] = pdata.NewAttributeValueInt(
+					int64(*seg.HTTP.Response.ContentLength))
+				res := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					parentSpanID: seg.ParentID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindCLIENT,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					attrs: attrs,
+				}
+				return []perSpanProperties{res}
+			},
+			verification: func(testCase string,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.NoError(t, err, testCase+": translation should've succeeded")
+				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
+					testCase+": one segment should translate to 1 ResourceSpans")
+
+				actualRs := actualTraces.ResourceSpans().At(0)
+				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
+			},
+		},
 	}
 
 	for _, tc := range tests {
