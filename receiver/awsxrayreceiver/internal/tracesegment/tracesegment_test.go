@@ -700,3 +700,60 @@ func TestTraceBodyUnMarshalling(t *testing.T) {
 		tc.verification(tc.testCase, actualSeg, err)
 	}
 }
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		testCase         string
+		input            *Segment
+		expectedErrorStr string
+	}{
+		{
+			testCase:         "missing segment name",
+			input:            &Segment{},
+			expectedErrorStr: `segment "name" can not be nil`,
+		},
+		{
+			testCase: "missing segment id",
+			input: &Segment{
+				Name: aws.String("a name"),
+			},
+			expectedErrorStr: `segment "id" can not be nil`,
+		},
+		{
+			testCase: "missing segment start_time",
+			input: &Segment{
+				Name: aws.String("a name"),
+				ID:   aws.String("an ID"),
+			},
+			expectedErrorStr: `segment "start_time" can not be nil`,
+		},
+		{
+			testCase: "missing segment trace_id",
+			input: &Segment{
+				Name:      aws.String("a name"),
+				ID:        aws.String("an ID"),
+				StartTime: aws.Float64(10),
+			},
+			expectedErrorStr: `segment "trace_id" can not be nil`,
+		},
+		{
+			testCase: "happy case",
+			input: &Segment{
+				Name:      aws.String("a name"),
+				ID:        aws.String("an ID"),
+				StartTime: aws.Float64(10),
+				TraceID:   aws.String("a traceID"),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		err := tc.input.Validate()
+
+		if len(tc.expectedErrorStr) > 0 {
+			assert.EqualError(t, err, tc.expectedErrorStr)
+		} else {
+			assert.NoError(t, err, "Validate should not fail")
+		}
+	}
+}

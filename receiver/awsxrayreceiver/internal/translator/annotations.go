@@ -23,16 +23,22 @@ import (
 func addAnnotations(annos map[string]interface{}, attrs *pdata.AttributeMap) {
 	for k, v := range annos {
 		switch t := v.(type) {
-		case int, int32, int64:
-			attrs.UpsertInt(k, t.(int64))
+		case int:
+			attrs.UpsertInt(k, int64(t))
+		case int32:
+			attrs.UpsertInt(k, int64(t))
+		case int64:
+			attrs.UpsertInt(k, t)
 		case string:
 			attrs.UpsertString(k, t)
 		case bool:
 			attrs.UpsertBool(k, t)
-		case float32, float64:
-			attrs.UpsertDouble(k, t.(float64))
+		case float32:
+			attrs.UpsertDouble(k, float64(t))
+		case float64:
+			attrs.UpsertDouble(k, t)
 		default:
-			attrs.UpsertString(k, fmt.Sprintf("%v", t))
+			attrs.UpsertString(k, fmt.Sprintf("%+v", t))
 		}
 	}
 }
