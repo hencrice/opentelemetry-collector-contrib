@@ -162,7 +162,6 @@ func populateResource(seg *tracesegment.Segment, rs *pdata.Resource) {
 	attrs := rs.Attributes()
 	attrs.InitEmptyWithCapacity(initAttrCapacity)
 
-	addOrigin(seg.Origin, &attrs)
 	addAWSToResource(seg.AWS, &attrs)
 	if seg.Service != nil {
 		addString(
