@@ -36,13 +36,14 @@ func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {
 		span.SetKind(pdata.SpanKindINTERNAL)
 		return nil
 	}
-
-	// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/api.md#spankind
-	attrs := span.Attributes()
-
 	// seg is a subsegment
 
+	attrs := span.Attributes()
+
+	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L193
+	span.SetName(*seg.Name)
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L197
+	// https://github.com/open-telemetry/opentelemetry-specification/blob/master/specification/trace/api.md#spankind
 	span.SetKind(pdata.SpanKindCLIENT)
 	switch *seg.Namespace {
 	case validAWSNamespace:
@@ -50,8 +51,7 @@ func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {
 		attrs.UpsertString(expTrans.AWSServiceAttribute, *seg.Name)
 
 	case validRemoteNamespace:
-		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/segment.go#L193
-		span.SetName(*seg.Name)
+		// no op
 	default:
 		return fmt.Errorf("unexpected namespace: %s", *seg.Namespace)
 	}

@@ -23,7 +23,7 @@ import (
 )
 
 func addHTTP(seg *tracesegment.Segment, span *pdata.Span) {
-	span.Status().InitEmpty()
+	span.Status().InitEmpty() // by default this sets it to `Status_Ok`
 	if seg.HTTP == nil {
 		return
 	}

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -27,6 +26,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(resp.Status)
 	defer resp.Body.Close()
 }

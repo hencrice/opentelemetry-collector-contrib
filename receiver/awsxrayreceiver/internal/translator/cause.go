@@ -44,7 +44,9 @@ func addCause(seg *tracesegment.Segment, span *pdata.Span) {
 	// temporarily setting the status to otlptrace.Status_UnknownError. This will be
 	// updated in the `segToSpans()` in translator.go once we traverse through all the
 	// subsegments to figure out the status code.
-	span.Status().SetCode(pdata.StatusCode(otlptrace.Status_UnknownError))
+	if span.Status().Code() == pdata.StatusCode(otlptrace.Status_Ok) {
+		span.Status().SetCode(pdata.StatusCode(otlptrace.Status_UnknownError))
+	}
 
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/cause.go#L48
 	switch seg.Cause.Type {

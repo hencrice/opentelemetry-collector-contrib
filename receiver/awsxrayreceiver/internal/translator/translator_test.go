@@ -339,7 +339,7 @@ func TestTranslation(t *testing.T) {
 					spanKind:     pdata.SpanKindCLIENT,
 					spanStatus:   otlptrace.Status_InvalidArgument,
 					eventsProps:  childSpan7163Evts,
-					attrs:        childSpan7318Attrs,
+					attrs:        childSpan7163Attrs,
 				}
 
 				subseg9da0 := seg.Subsegments[0].Subsegments[1].Subsegments[0]
@@ -501,10 +501,20 @@ func initResourceSpans(expectedSeg *tracesegment.Segment,
 
 	rs := pdata.NewResourceSpans()
 	rs.InitEmpty()
-	rs.Resource().InitEmpty()
-	resourceAttrMap := pdata.NewAttributeMap()
-	resourceAttrMap.InitFromMap(resourceAttrs)
-	rs.Resource().Attributes().InitFromAttributeMap(resourceAttrMap)
+
+	if len(resourceAttrs) > 0 {
+		rs.Resource().InitEmpty()
+		resourceAttrMap := pdata.NewAttributeMap()
+		resourceAttrMap.InitFromMap(resourceAttrs)
+		rs.Resource().Attributes().InitFromAttributeMap(resourceAttrMap)
+	} else {
+		rs.Resource().Attributes().InitEmptyWithCapacity(initAttrCapacity)
+	}
+
+	if len(propsPerSpan) == 0 {
+		return &rs
+	}
+
 	rs.InstrumentationLibrarySpans().Resize(1)
 	ls := rs.InstrumentationLibrarySpans().At(0)
 	ls.InitEmpty()
@@ -531,18 +541,24 @@ func initResourceSpans(expectedSeg *tracesegment.Segment,
 		sp.Status().InitEmpty()
 		sp.Status().SetCode(pdata.StatusCode(props.spanStatus))
 
-		sp.Events().Resize(len(props.eventsProps))
-		for i, evtProps := range props.eventsProps {
-			spEvt := sp.Events().At(i)
-			spEvt.SetName(evtProps.name)
-			evtAttrMap := pdata.NewAttributeMap()
-			evtAttrMap.InitFromMap(evtProps.attrs)
-			spEvt.Attributes().InitFromAttributeMap(evtAttrMap)
+		if len(props.eventsProps) > 0 {
+			sp.Events().Resize(len(props.eventsProps))
+			for i, evtProps := range props.eventsProps {
+				spEvt := sp.Events().At(i)
+				spEvt.SetName(evtProps.name)
+				evtAttrMap := pdata.NewAttributeMap()
+				evtAttrMap.InitFromMap(evtProps.attrs)
+				spEvt.Attributes().InitFromAttributeMap(evtAttrMap)
+			}
 		}
 
-		spanAttrMap := pdata.NewAttributeMap()
-		spanAttrMap.InitFromMap(props.attrs)
-		sp.Attributes().InitFromAttributeMap(spanAttrMap)
+		if len(props.attrs) > 0 {
+			spanAttrMap := pdata.NewAttributeMap()
+			spanAttrMap.InitFromMap(props.attrs)
+			sp.Attributes().InitFromAttributeMap(spanAttrMap)
+		} else {
+			sp.Attributes().InitEmptyWithCapacity(initAttrCapacity)
+		}
 	}
 	return &rs
 }
@@ -585,7 +601,7 @@ func compare2ResourceSpans(t *testing.T, testCase string, exp, act *pdata.Resour
 		assert.Equal(t,
 			expS.Attributes().Sort(),
 			actS.Attributes().Sort(),
-			fmt.Sprintf("%s: span%d.Attributes() differ", testCase, i),
+			fmt.Sprintf("%s: span[%s].Attributes() differ", testCase, string(expS.SpanID())),
 		)
 		expS.Attributes().InitEmptyWithCapacity(0)
 		actS.Attributes().InitEmptyWithCapacity(0)
@@ -595,8 +611,8 @@ func compare2ResourceSpans(t *testing.T, testCase string, exp, act *pdata.Resour
 		assert.Equal(t,
 			expEvts.Len(),
 			actEvts.Len(),
-			fmt.Sprintf("%s: span%d.Events().Len() differ",
-				testCase, i),
+			fmt.Sprintf("%s: span[%s].Events().Len() differ",
+				testCase, string(expS.SpanID())),
 		)
 
 		for j := 0; j < expEvts.Len(); j++ {
@@ -606,8 +622,8 @@ func compare2ResourceSpans(t *testing.T, testCase string, exp, act *pdata.Resour
 			assert.Equal(t,
 				expEvt.Attributes().Sort(),
 				actEvt.Attributes().Sort(),
-				fmt.Sprintf("%s: span%d, event%d.Attributes() differ",
-					testCase, i, j),
+				fmt.Sprintf("%s: span[%s], event[%d].Attributes() differ",
+					testCase, string(expS.SpanID()), j),
 			)
 			expEvt.Attributes().InitEmptyWithCapacity(0)
 			actEvt.Attributes().InitEmptyWithCapacity(0)
