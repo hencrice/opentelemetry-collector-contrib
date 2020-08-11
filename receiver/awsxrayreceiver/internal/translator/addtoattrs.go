@@ -27,6 +27,9 @@ const (
 
 	// AWSXRayResourceARNAttribute is the `resource_arn` field in an X-Ray segment
 	AWSXRayResourceARNAttribute = "aws.xray.resource_arn"
+
+	// AWSXRayTracedAttribute is the `traced` field in an X-Ray subsegment
+	AWSXRayTracedAttribute = "aws.xray.traced"
 )
 
 func addBool(val *bool, attrKey string, attrs *pdata.AttributeMap) {

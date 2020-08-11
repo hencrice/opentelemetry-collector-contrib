@@ -152,6 +152,8 @@ func populateSpan(
 		return err
 	}
 
+	addBool(seg.Traced, AWSXRayTracedAttribute, &attrs)
+
 	// TODO: transform the `metadata` field once X-Ray exporter
 	// figures out how they are going to unmarshal it from otlp
 	// back to X-Ray segment format

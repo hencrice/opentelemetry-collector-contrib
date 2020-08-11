@@ -662,6 +662,7 @@ func TestTranslation(t *testing.T) {
 					*seg.HTTP.Request.URL)
 				attrs[conventions.AttributeHTTPResponseContentLength] = pdata.NewAttributeValueInt(
 					int64(*seg.HTTP.Response.ContentLength))
+				attrs[AWSXRayTracedAttribute] = pdata.NewAttributeValueBool(true)
 				res := perSpanProperties{
 					traceID:      *seg.TraceID,
 					spanID:       *seg.ID,
