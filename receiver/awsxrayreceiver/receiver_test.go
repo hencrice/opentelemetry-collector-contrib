@@ -172,7 +172,7 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 		return len(got) == 1
 	}, "consumer should eventually get the X-Ray span")
 
-	obsreporttest.CheckReceiverTracesViews(t, receiverName, udppoller.Transport, 1, 0)
+	obsreporttest.CheckReceiverTracesViews(t, receiverName, udppoller.Transport, 18, 0)
 }
 
 func TestTranslatorErrorsOut(t *testing.T) {
@@ -190,8 +190,9 @@ func TestTranslatorErrorsOut(t *testing.T) {
 
 	testutil.WaitFor(t, func() bool {
 		logs := recordedLogs.All()
+		fmt.Println(logs)
 		return len(logs) > 0 && strings.Contains(logs[len(logs)-1].Message,
-			"X-Ray segment to OT span transformation failed")
+			"X-Ray segment to OT traces conversion failed")
 	}, "poller should log warning because consumer errored out")
 
 	obsreporttest.CheckReceiverTracesViews(t, receiverName, udppoller.Transport, 0, 1)

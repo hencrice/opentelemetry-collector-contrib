@@ -23,7 +23,7 @@ import (
 )
 
 func addHTTP(seg *tracesegment.Segment, span *pdata.Span) {
-	span.Status().InitEmpty() // by default this sets it to `Status_Ok`
+	span.Status().InitEmpty() // by default this sets the code to `Status_Ok`
 	if seg.HTTP == nil {
 		return
 	}
@@ -50,9 +50,10 @@ func addHTTP(seg *tracesegment.Segment, span *pdata.Span) {
 	if resp := seg.HTTP.Response; resp != nil {
 		if resp.Status != nil {
 			otStatus := tracetranslator.OCStatusCodeFromHTTP(int32(*resp.Status))
-			// in X-Ray exporter, the segment status is set via
-			// span attributes, the status code here is not
-			// actually used
+			// in X-Ray exporter, the segment status is set:
+			// first via the span attribute, conventions.AttributeHTTPStatusCode
+			// then the span status. Since we are also setting the span attribute
+			// below, the span status code here will not be actually used
 			span.Status().SetCode(pdata.StatusCode(otStatus))
 			attrs.UpsertInt(conventions.AttributeHTTPStatusCode, int64(*resp.Status))
 		}

@@ -40,7 +40,6 @@ func addSQLToSpan(sql *tracesegment.SQLData, attrs *pdata.AttributeMap) error {
 	}
 	// not handling sql.ConnectionString for now because the X-Ray exporter
 	// does not support it
-
 	addString(sql.DatabaseType, conventions.AttributeDBSystem, attrs)
 	addString(sql.SanitizedQuery, conventions.AttributeDBStatement, attrs)
 	addString(sql.User, conventions.AttributeDBUser, attrs)
@@ -50,7 +49,7 @@ func addSQLToSpan(sql *tracesegment.SQLData, attrs *pdata.AttributeMap) error {
 var re = regexp.MustCompile(`^(.+\/\/.+)\/(.+)$`)
 
 const (
-	dbUrlI  = 1
+	dbURLI  = 1
 	dbNameI = 2
 )
 
@@ -62,5 +61,5 @@ func splitSQLURL(rawURL string) (string, string, error) {
 			rawURL,
 		)
 	}
-	return m[dbUrlI], m[dbNameI], nil
+	return m[dbURLI], m[dbNameI], nil
 }

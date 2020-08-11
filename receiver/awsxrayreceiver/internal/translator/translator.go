@@ -29,17 +29,20 @@ const (
 	initAttrCapacity = 15
 )
 
-// ToTraces converts X-Ray segment (and its subsegments) to OT traces.
-func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
+// ToTraces converts X-Ray segment (and its subsegments) to an OT ResourceSpans.
+func ToTraces(rawSeg []byte) (*pdata.Traces, int, error) {
 	var seg tracesegment.Segment
 	err := json.Unmarshal(rawSeg, &seg)
 	if err != nil {
-		return nil, err
+		// return 1 as total segment (&subsegments) count
+		// because we can't parse the body the UDP packet.
+		return nil, 1, err
 	}
+	count := totalSegmentsCount(&seg)
 
 	err = seg.Validate()
 	if err != nil {
-		return nil, err
+		return nil, count, err
 	}
 
 	traceData := pdata.NewTraces()
@@ -57,7 +60,6 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 	// `InstrumentationLibrarySpansSlice`.
 	rspan.InstrumentationLibrarySpans().Resize(1)
 	ils := rspan.InstrumentationLibrarySpans().At(0)
-	count := totalSegmentsCount(&seg)
 	ils.Spans().Resize(count)
 	spans := ils.Spans()
 
@@ -72,10 +74,10 @@ func ToTraces(rawSeg []byte) (*pdata.Traces, error) {
 	// the embedded subsegment to generate independent child spans.
 	_, _, err = segToSpans(&seg, seg.TraceID, nil, &spans, 0)
 	if err != nil {
-		return nil, err
+		return nil, count, err
 	}
 
-	return &traceData, nil
+	return &traceData, count, nil
 }
 
 func segToSpans(seg *tracesegment.Segment,

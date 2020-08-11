@@ -25,7 +25,6 @@ import (
 )
 
 func addAWSToResource(aws *tracesegment.AWSData, attrs *pdata.AttributeMap) {
-	// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-aws
 	if aws == nil {
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/aws.go#L153
 		// this implies that the current segment being processed is not generated
@@ -36,6 +35,9 @@ func addAWSToResource(aws *tracesegment.AWSData, attrs *pdata.AttributeMap) {
 
 	attrs.UpsertString(conventions.AttributeCloudProvider, "aws")
 	addString(aws.AccountID, conventions.AttributeCloudAccount, attrs)
+
+	// based on https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-aws
+	// it's possible to have all ec2, ecs and beanstalk fields at the same time.
 	if ec2 := aws.EC2; ec2 != nil {
 		addString(ec2.AvailabilityZone, conventions.AttributeCloudZone, attrs)
 		addString(ec2.InstanceID, conventions.AttributeHostID, attrs)

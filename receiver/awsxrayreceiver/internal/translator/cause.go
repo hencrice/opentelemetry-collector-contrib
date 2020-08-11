@@ -42,22 +42,25 @@ func addCause(seg *tracesegment.Segment, span *pdata.Span) {
 	// can only be found in one of the (nested) subsegmets. So we need to signal that
 	// in this case, the status of the span is not otlptrace.Status_Ok by
 	// temporarily setting the status to otlptrace.Status_UnknownError. This will be
-	// updated in the `segToSpans()` in translator.go once we traverse through all the
-	// subsegments to figure out the status code.
+	// updated to a more specific error in the `segToSpans()` in translator.go once
+	// we traverse through all the subsegments.
 	if span.Status().Code() == pdata.StatusCode(otlptrace.Status_Ok) {
+		// otlptrace.Status_Ok is the default value after span.Status().InitEmpty()
+		// is called
 		span.Status().SetCode(pdata.StatusCode(otlptrace.Status_UnknownError))
 	}
 
-	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/cause.go#L48
 	switch seg.Cause.Type {
 	case tracesegment.CauseTypeExceptionID:
-		// Right now the X-Ray exporter always genearate a new ID:
+		// Right now the X-Ray exporter always genearates a new ID:
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/cause.go#L74
 		// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/master/exporter/awsxrayexporter/translator/cause.go#L112
 		// so we can only pass this as part of the status message as a fallback mechanism
 		span.Status().SetMessage(*seg.Cause.ExceptionID)
 	case tracesegment.CauseTypeObject:
 		evts := span.Events()
+		// not sure whether there are existing events, so
+		// append new empty events instead
 		exceptionEventStartIndex := evts.Len()
 		evts.Resize(exceptionEventStartIndex + len(seg.Cause.Exceptions))
 

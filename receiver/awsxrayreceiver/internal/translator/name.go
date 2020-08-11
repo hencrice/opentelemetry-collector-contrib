@@ -27,7 +27,6 @@ import (
 const (
 	validAWSNamespace    = "aws"
 	validRemoteNamespace = "remote"
-	awsServiceAttribute  = "aws.service"
 )
 
 func addNameAndNamespace(seg *tracesegment.Segment, span *pdata.Span) error {

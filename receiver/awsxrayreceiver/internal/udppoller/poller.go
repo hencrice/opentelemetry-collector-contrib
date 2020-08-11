@@ -189,14 +189,14 @@ func (p *poller) poll() {
 			bufMessage := buffer[0:rlen]
 
 			header, body, err := tracesegment.SplitHeaderBody(bufMessage)
+			// For now tracesegment.SplitHeaderBody does not return irrecoverable error
+			// so we don't check for it
 			if errors.As(err, &errRecv) {
 				p.logger.Error("Failed to split segment header and body",
 					zap.Error(err))
 				obsreport.EndTraceDataReceiveOp(ctx, tracesegment.TypeStr, 1, err)
 				continue
 			}
-			// For now tracesegment.SplitHeaderBody does not return irrecoverable error
-			// so we don't check for it
 
 			if len(body) == 0 {
 				p.logger.Warn("Missing body",

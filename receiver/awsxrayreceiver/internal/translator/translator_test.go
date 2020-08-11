@@ -817,7 +817,14 @@ func TestTranslation(t *testing.T) {
 			)
 		}
 
-		traces, err := ToTraces(body)
+		traces, totalSpansCount, err := ToTraces(body)
+		if err == nil || (expectedRs != nil && expectedRs.InstrumentationLibrarySpans().Len() > 0 &&
+			expectedRs.InstrumentationLibrarySpans().At(0).Spans().Len() > 0) {
+			assert.Equal(t, totalSpansCount,
+				expectedRs.InstrumentationLibrarySpans().At(0).Spans().Len(),
+				"generated span count is different from the expected",
+			)
+		}
 		tc.verification(tc.testCase, &actualSeg, expectedRs, traces, err)
 	}
 }

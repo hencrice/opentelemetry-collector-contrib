@@ -24,7 +24,7 @@ func addParentSpanID(seg *tracesegment.Segment, parentID *string, span *pdata.Sp
 	if parentID != nil {
 		// `seg` is an embedded subsegment. Please refer to:
 		// https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-subsegments
-		// for the difference between the embedded & independent subsegment.
+		// for the difference between an embedded and an independent subsegment.
 		span.SetParentSpanID(pdata.SpanID([]byte(*parentID)))
 	} else if seg.ParentID != nil {
 		// `seg` is an independent subsegment
