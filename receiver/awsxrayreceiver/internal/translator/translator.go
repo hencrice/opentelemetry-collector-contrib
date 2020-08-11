@@ -147,7 +147,10 @@ func populateSpan(
 	addHTTP(seg, span)
 	addCause(seg, span)
 	addAWSToSpan(seg.AWS, &attrs)
-	addSQLToSpan(seg.SQL, &attrs)
+	err = addSQLToSpan(seg.SQL, &attrs)
+	if err != nil {
+		return err
+	}
 
 	// TODO: transform the `metadata` field once X-Ray exporter
 	// figures out how they are going to unmarshal it from otlp

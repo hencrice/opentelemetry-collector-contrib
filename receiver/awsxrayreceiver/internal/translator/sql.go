@@ -16,7 +16,7 @@ package translator
 
 import (
 	"fmt"
-	"strings"
+	"regexp"
 
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/translator/conventions"
@@ -47,13 +47,20 @@ func addSQLToSpan(sql *tracesegment.SQLData, attrs *pdata.AttributeMap) error {
 	return nil
 }
 
+var re = regexp.MustCompile(`^(.+\/\/.+)\/(.+)$`)
+
+const (
+	dbUrlI  = 1
+	dbNameI = 2
+)
+
 func splitSQLURL(rawURL string) (string, string, error) {
-	li := strings.LastIndex(rawURL, "/")
-	if li == -1 {
+	m := re.FindStringSubmatch(rawURL)
+	if len(m) == 0 {
 		return "", "", fmt.Errorf(
 			"failed to parse out the database name in the \"sql.url\" field, rawUrl: %s",
 			rawURL,
 		)
 	}
-	return rawURL[:li], rawURL[li+1:], nil
+	return m[dbUrlI], m[dbNameI], nil
 }
