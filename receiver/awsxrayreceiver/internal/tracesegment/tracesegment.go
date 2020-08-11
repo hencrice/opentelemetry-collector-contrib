@@ -57,34 +57,34 @@ type Segment struct {
 	StartTime *float64 `json:"start_time"`
 
 	// Segment-only optional fields
-	Service     *ServiceData `json:"service,omitempty"`
-	Origin      *string      `json:"origin,omitempty"`
-	User        *string      `json:"user,omitempty"`
-	ResourceARN *string      `json:"resource_arn,omitempty"`
+	Service     *ServiceData `json:"service"`
+	Origin      *string      `json:"origin"`
+	User        *string      `json:"user"`
+	ResourceARN *string      `json:"resource_arn"`
 
 	// Optional fields for both Segment and subsegments
 	TraceID     *string                           `json:"trace_id"`
 	EndTime     *float64                          `json:"end_time"`
 	InProgress  *bool                             `json:"in_progress"`
-	HTTP        *HTTPData                         `json:"http,omitempty"`
-	Fault       *bool                             `json:"fault,omitempty"`
-	Error       *bool                             `json:"error,omitempty"`
-	Throttle    *bool                             `json:"throttle,omitempty"`
-	Cause       *CauseData                        `json:"cause,omitempty"`
-	AWS         *AWSData                          `json:"aws,omitempty"`
-	Annotations map[string]interface{}            `json:"annotations,omitempty"`
-	Metadata    map[string]map[string]interface{} `json:"metadata,omitempty"`
-	Subsegments []Segment                         `json:"subsegments,omitempty"`
+	HTTP        *HTTPData                         `json:"http"`
+	Fault       *bool                             `json:"fault"`
+	Error       *bool                             `json:"error"`
+	Throttle    *bool                             `json:"throttle"`
+	Cause       *CauseData                        `json:"cause"`
+	AWS         *AWSData                          `json:"aws"`
+	Annotations map[string]interface{}            `json:"annotations"`
+	Metadata    map[string]map[string]interface{} `json:"metadata"`
+	Subsegments []Segment                         `json:"subsegments"`
 
 	// (for both embedded and independent) subsegment-only (optional) fields.
 	// Please refer to https://docs.aws.amazon.com/xray/latest/devguide/xray-api-segmentdocuments.html#api-segmentdocuments-subsegments
 	// for more information on subsegment.
-	Namespace    *string  `json:"namespace,omitempty"`
-	ParentID     *string  `json:"parent_id,omitempty"`
-	Type         *string  `json:"type,omitempty"`
-	PrecursorIDs []string `json:"precursor_ids,omitempty"`
-	Traced       *bool    `json:"traced,omitempty"`
-	SQL          *SQLData `json:"sql,omitempty"`
+	Namespace    *string  `json:"namespace"`
+	ParentID     *string  `json:"parent_id"`
+	Type         *string  `json:"type"`
+	PrecursorIDs []string `json:"precursor_ids"`
+	Traced       *bool    `json:"traced"`
+	SQL          *SQLData `json:"sql"`
 }
 
 // Validate checks whether the segment is valid or not
@@ -115,19 +115,19 @@ func (s *Segment) Validate() error {
 // originates from
 type AWSData struct {
 	// Segment-only
-	Beanstalk *BeanstalkMetadata `json:"elastic_beanstalk,omitempty"`
-	ECS       *ECSMetadata       `json:"ecs,omitempty"`
-	EC2       *EC2Metadata       `json:"ec2,omitempty"`
-	XRay      *XRayMetaData      `json:"xray,omitempty"`
+	Beanstalk *BeanstalkMetadata `json:"elastic_beanstalk"`
+	ECS       *ECSMetadata       `json:"ecs"`
+	EC2       *EC2Metadata       `json:"ec2"`
+	XRay      *XRayMetaData      `json:"xray"`
 
 	// For both segment and subsegments
-	AccountID    *string `json:"account_id,omitempty"`
-	Operation    *string `json:"operation,omitempty"`
-	RemoteRegion *string `json:"region,omitempty"`
-	RequestID    *string `json:"request_id,omitempty"`
-	QueueURL     *string `json:"queue_url,omitempty"`
-	TableName    *string `json:"table_name,omitempty"`
-	Retries      *int    `json:"retries,omitempty"`
+	AccountID    *string `json:"account_id"`
+	Operation    *string `json:"operation"`
+	RemoteRegion *string `json:"region"`
+	RequestID    *string `json:"request_id"`
+	QueueURL     *string `json:"queue_url"`
+	TableName    *string `json:"table_name"`
+	Retries      *int    `json:"retries"`
 }
 
 // EC2Metadata represents the EC2 metadata field
@@ -160,9 +160,9 @@ type CauseData struct {
 }
 
 type causeObject struct {
-	WorkingDirectory *string     `json:"working_directory,omitempty"`
-	Paths            []string    `json:"paths,omitempty"`
-	Exceptions       []Exception `json:"exceptions,omitempty"`
+	WorkingDirectory *string     `json:"working_directory"`
+	Paths            []string    `json:"paths"`
+	Exceptions       []Exception `json:"exceptions"`
 }
 
 // UnmarshalJSON is the custom unmarshaller for the cause field
@@ -185,91 +185,91 @@ func (c *CauseData) UnmarshalJSON(data []byte) error {
 
 // Exception represents an exception occurred
 type Exception struct {
-	ID        *string      `json:"id,omitempty"`
-	Message   *string      `json:"message,omitempty"`
-	Type      *string      `json:"type,omitempty"`
-	Remote    *bool        `json:"remote,omitempty"`
-	Truncated *int         `json:"truncated,omitempty"`
-	Skipped   *int         `json:"skipped,omitempty"`
-	Cause     *string      `json:"cause,omitempty"`
-	Stack     []StackFrame `json:"stack,omitempty"`
+	ID        *string      `json:"id"`
+	Message   *string      `json:"message"`
+	Type      *string      `json:"type"`
+	Remote    *bool        `json:"remote"`
+	Truncated *int         `json:"truncated"`
+	Skipped   *int         `json:"skipped"`
+	Cause     *string      `json:"cause"`
+	Stack     []StackFrame `json:"stack"`
 }
 
 // StackFrame represents a frame in the stack when an exception occurred
 type StackFrame struct {
-	Path  *string `json:"path,omitempty"`
-	Line  *int    `json:"line,omitempty"`
-	Label *string `json:"label,omitempty"`
+	Path  *string `json:"path"`
+	Line  *int    `json:"line"`
+	Label *string `json:"label"`
 }
 
 // HTTPData provides the shape for unmarshalling request and response fields.
 type HTTPData struct {
-	Request  *RequestData  `json:"request,omitempty"`
-	Response *ResponseData `json:"response,omitempty"`
+	Request  *RequestData  `json:"request"`
+	Response *ResponseData `json:"response"`
 }
 
 // RequestData provides the shape for unmarshalling the request field.
 type RequestData struct {
 	// Available in segment
-	XForwardedFor *bool `json:"x_forwarded_for,omitempty"`
+	XForwardedFor *bool `json:"x_forwarded_for"`
 
 	// Available in both segment and subsegments
-	Method    *string `json:"method,omitempty"`
-	URL       *string `json:"url,omitempty"`
-	UserAgent *string `json:"user_agent,omitempty"`
-	ClientIP  *string `json:"client_ip,omitempty"`
+	Method    *string `json:"method"`
+	URL       *string `json:"url"`
+	UserAgent *string `json:"user_agent"`
+	ClientIP  *string `json:"client_ip"`
 }
 
 // ResponseData provides the shape for unmarshalling the response field.
 type ResponseData struct {
-	Status        *int `json:"status,omitempty"`
-	ContentLength *int `json:"content_length,omitempty"`
+	Status        *int `json:"status"`
+	ContentLength *int `json:"content_length"`
 }
 
 // ECSData provides the shape for unmarshalling the ecs field.
 type ECSData struct {
-	Container *string `json:"container,omitempty"`
+	Container *string `json:"container"`
 }
 
 // EC2Data provides the shape for unmarshalling the ec2 field.
 type EC2Data struct {
-	InstanceID       *string `json:"instance_id,omitempty"`
-	AvailabilityZone *string `json:"availability_zone,omitempty"`
+	InstanceID       *string `json:"instance_id"`
+	AvailabilityZone *string `json:"availability_zone"`
 }
 
 // ElasticBeanstalkData provides the shape for unmarshalling the elastic_beanstalk field.
 type ElasticBeanstalkData struct {
-	EnvironmentName *string `json:"environment_name,omitempty"`
-	VersionLabel    *string `json:"version_label,omitempty"`
-	DeploymentID    *int    `json:"deployment_id,omitempty"`
+	EnvironmentName *string `json:"environment_name"`
+	VersionLabel    *string `json:"version_label"`
+	DeploymentID    *int    `json:"deployment_id"`
 }
 
 // TracingData provides the shape for unmarshalling the tracing data.
 type TracingData struct {
-	SDK *string `json:"sdk,omitempty"`
+	SDK *string `json:"sdk"`
 }
 
 // XRayMetaData provides the shape for unmarshalling the xray field
 type XRayMetaData struct {
-	SDKVersion *string `json:"sdk_version,omitempty"`
-	SDK        *string `json:"sdk,omitempty"`
+	SDKVersion *string `json:"sdk_version"`
+	SDK        *string `json:"sdk"`
 }
 
 // SQLData provides the shape for unmarshalling the sql field.
 type SQLData struct {
-	ConnectionString *string `json:"connection_string,omitempty"`
-	URL              *string `json:"url,omitempty"` // protocol://host[:port]/database
-	SanitizedQuery   *string `json:"sanitized_query,omitempty"`
-	DatabaseType     *string `json:"database_type,omitempty"`
-	DatabaseVersion  *string `json:"database_version,omitempty"`
-	DriverVersion    *string `json:"driver_version,omitempty"`
-	User             *string `json:"user,omitempty"`
-	Preparation      *string `json:"preparation,omitempty"` // "statement" / "call"
+	ConnectionString *string `json:"connection_string"`
+	URL              *string `json:"url"` // protocol://host[:port]/database
+	SanitizedQuery   *string `json:"sanitized_query"`
+	DatabaseType     *string `json:"database_type"`
+	DatabaseVersion  *string `json:"database_version"`
+	DriverVersion    *string `json:"driver_version"`
+	User             *string `json:"user"`
+	Preparation      *string `json:"preparation"` // "statement" / "call"
 }
 
 // ServiceData provides the shape for unmarshalling the service field.
 type ServiceData struct {
-	Version         *string `json:"version,omitempty"`
-	CompilerVersion *string `json:"compiler_version,omitempty"`
-	Compiler        *string `json:"compiler,omitempty"`
+	Version         *string `json:"version"`
+	CompilerVersion *string `json:"compiler_version"`
+	Compiler        *string `json:"compiler"`
 }
