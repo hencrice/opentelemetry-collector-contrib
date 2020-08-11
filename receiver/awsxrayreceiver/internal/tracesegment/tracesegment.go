@@ -258,7 +258,7 @@ type XRayMetaData struct {
 // SQLData provides the shape for unmarshalling the sql field.
 type SQLData struct {
 	ConnectionString *string `json:"connection_string,omitempty"`
-	URL              *string `json:"url,omitempty"` // host:port/database
+	URL              *string `json:"url,omitempty"` // protocol://host[:port]/database
 	SanitizedQuery   *string `json:"sanitized_query,omitempty"`
 	DatabaseType     *string `json:"database_type,omitempty"`
 	DatabaseVersion  *string `json:"database_version,omitempty"`

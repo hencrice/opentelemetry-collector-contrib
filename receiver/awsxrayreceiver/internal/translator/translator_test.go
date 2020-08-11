@@ -76,11 +76,13 @@ func TestTranslation(t *testing.T) {
 	}
 
 	tests := []struct {
-		testCase              string
-		samplePath            string
-		expectedResourceAttrs func(seg *tracesegment.Segment) map[string]pdata.AttributeValue
-		propsPerSpan          func(testCase string, t *testing.T, seg *tracesegment.Segment) []perSpanProperties
-		verification          func(testCase string,
+		testCase                  string
+		expectedUnmarshallFailure bool
+		samplePath                string
+		expectedResourceAttrs     func(seg *tracesegment.Segment) map[string]pdata.AttributeValue
+		propsPerSpan              func(testCase string, t *testing.T, seg *tracesegment.Segment) []perSpanProperties
+		verification              func(testCase string,
+			actualSeg *tracesegment.Segment,
 			expectedRs *pdata.ResourceSpans,
 			actualTraces *pdata.Traces,
 			err error)
@@ -110,6 +112,7 @@ func TestTranslation(t *testing.T) {
 				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
+				_ *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
 				assert.NoError(t, err, testCase+": translation should've succeeded")
 				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
@@ -487,6 +490,7 @@ func TestTranslation(t *testing.T) {
 				}
 			},
 			verification: func(testCase string,
+				_ *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
 				assert.NoError(t, err, testCase+": translation should've succeeded")
 				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
@@ -521,6 +525,7 @@ func TestTranslation(t *testing.T) {
 				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
+				_ *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
 				assert.NoError(t, err, testCase+": translation should've succeeded")
 				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
@@ -575,6 +580,7 @@ func TestTranslation(t *testing.T) {
 				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
+				_ *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
 				assert.NoError(t, err, testCase+": translation should've succeeded")
 				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
@@ -609,6 +615,7 @@ func TestTranslation(t *testing.T) {
 				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
+				_ *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
 				assert.NoError(t, err, testCase+": translation should've succeeded")
 				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
@@ -628,8 +635,12 @@ func TestTranslation(t *testing.T) {
 				return nil
 			},
 			verification: func(testCase string,
+				actualSeg *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
-				assert.EqualError(t, err, "unexpected namespace: invalidNs", testCase+": translation should've failed")
+				assert.EqualError(t, err,
+					fmt.Sprintf("unexpected namespace: %s",
+						*actualSeg.Subsegments[0].Subsegments[0].Namespace),
+					testCase+": translation should've failed")
 			},
 		},
 		{
@@ -666,6 +677,7 @@ func TestTranslation(t *testing.T) {
 				return []perSpanProperties{res}
 			},
 			verification: func(testCase string,
+				_ *tracesegment.Segment,
 				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
 				assert.NoError(t, err, testCase+": translation should've succeeded")
 				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
@@ -673,6 +685,108 @@ func TestTranslation(t *testing.T) {
 
 				actualRs := actualTraces.ResourceSpans().At(0)
 				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
+			},
+		},
+		{
+			testCase:   "TranslateSql",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "indepSubsegmentWithSql.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				attrs := make(map[string]pdata.AttributeValue)
+				attrs[conventions.AttributeCloudProvider] = pdata.NewAttributeValueString("nonAWS")
+				return attrs
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				attrs := make(map[string]pdata.AttributeValue)
+				attrs[conventions.AttributeDBConnectionString] = pdata.NewAttributeValueString(
+					"jdbc:postgresql://aawijb5u25wdoy.cpamxznpdoq8.us-west-2.rds.amazonaws.com:5432")
+				attrs[conventions.AttributeDBName] = pdata.NewAttributeValueString("ebdb")
+				attrs[conventions.AttributeDBSystem] = pdata.NewAttributeValueString(
+					*seg.SQL.DatabaseType)
+				attrs[conventions.AttributeDBStatement] = pdata.NewAttributeValueString(
+					*seg.SQL.SanitizedQuery)
+				attrs[conventions.AttributeDBUser] = pdata.NewAttributeValueString(
+					*seg.SQL.User)
+				res := perSpanProperties{
+					traceID:      *seg.TraceID,
+					spanID:       *seg.ID,
+					parentSpanID: seg.ParentID,
+					name:         *seg.Name,
+					startTimeSec: *seg.StartTime,
+					endTimeSec:   seg.EndTime,
+					spanKind:     pdata.SpanKindCLIENT,
+					spanStatus: spanSt{
+						code: otlptrace.Status_Ok,
+					},
+					attrs: attrs,
+				}
+				return []perSpanProperties{res}
+			},
+			verification: func(testCase string,
+				_ *tracesegment.Segment,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.NoError(t, err, testCase+": translation should've succeeded")
+				assert.Equal(t, 1, actualTraces.ResourceSpans().Len(),
+					testCase+": one segment should translate to 1 ResourceSpans")
+
+				actualRs := actualTraces.ResourceSpans().At(0)
+				compare2ResourceSpans(t, testCase, expectedRs, &actualRs)
+			},
+		},
+		{
+			testCase:   "TranslateInvalidSqlUrl",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "indepSubsegmentWithInvalidSqlUrl.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				return nil
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				return nil
+			},
+			verification: func(testCase string,
+				actualSeg *tracesegment.Segment,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.EqualError(t, err,
+					fmt.Sprintf(
+						"failed to parse out the database name in the \"sql.url\" field, rawUrl: %s",
+						*actualSeg.SQL.URL,
+					),
+					testCase+": translation should've failed")
+			},
+		},
+		{
+			testCase:                  "TranslateJsonUnmarshallFailed",
+			expectedUnmarshallFailure: true,
+			samplePath:                path.Join("../../", "testdata", "rawsegment", "minCauseIsInvalid.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				return nil
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				return nil
+			},
+			verification: func(testCase string,
+				actualSeg *tracesegment.Segment,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.EqualError(t, err,
+					fmt.Sprintf(
+						"the value assigned to the `cause` field does not appear to be a string: %v",
+						[]byte{'2', '0', '0'},
+					),
+					testCase+": translation should've failed")
+			},
+		},
+		{
+			testCase:   "TranslateRootSegValidationFailed",
+			samplePath: path.Join("../../", "testdata", "rawsegment", "segmentValidationFailed.txt"),
+			expectedResourceAttrs: func(seg *tracesegment.Segment) map[string]pdata.AttributeValue {
+				return nil
+			},
+			propsPerSpan: func(_ string, _ *testing.T, seg *tracesegment.Segment) []perSpanProperties {
+				return nil
+			},
+			verification: func(testCase string,
+				actualSeg *tracesegment.Segment,
+				expectedRs *pdata.ResourceSpans, actualTraces *pdata.Traces, err error) {
+				assert.EqualError(t, err, `segment "start_time" can not be nil`,
+					testCase+": translation should've failed")
 			},
 		},
 	}
@@ -685,20 +799,24 @@ func TestTranslation(t *testing.T) {
 		assert.NoError(t, err, tc.testCase+": can split body")
 		assert.True(t, len(body) > 0, tc.testCase+": body length is 0")
 
-		var actualSeg tracesegment.Segment
-		err = json.Unmarshal(body, &actualSeg)
-		// the correctness of the actual segment
-		// has been verified in the tracesegment_test.go
-		assert.NoError(t, err, tc.testCase+": failed to unmarhal raw segment")
-
-		expectedRs := initResourceSpans(
-			&actualSeg,
-			tc.expectedResourceAttrs(&actualSeg),
-			tc.propsPerSpan(tc.testCase, t, &actualSeg),
+		var (
+			actualSeg  tracesegment.Segment
+			expectedRs *pdata.ResourceSpans
 		)
+		if !tc.expectedUnmarshallFailure {
+			err = json.Unmarshal(body, &actualSeg)
+			// the correctness of the actual segment
+			// has been verified in the tracesegment_test.go
+			assert.NoError(t, err, tc.testCase+": failed to unmarhal raw segment")
+			expectedRs = initResourceSpans(
+				&actualSeg,
+				tc.expectedResourceAttrs(&actualSeg),
+				tc.propsPerSpan(tc.testCase, t, &actualSeg),
+			)
+		}
 
 		traces, err := ToTraces(body)
-		tc.verification(tc.testCase, expectedRs, traces, err)
+		tc.verification(tc.testCase, &actualSeg, expectedRs, traces, err)
 	}
 }
 
