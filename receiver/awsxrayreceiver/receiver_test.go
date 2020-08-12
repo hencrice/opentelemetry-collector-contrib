@@ -32,6 +32,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/proxy"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/udppoller"
 )
 
@@ -74,8 +75,9 @@ func TestPollerCreationFailed(t *testing.T) {
 }
 
 func TestCantStartAnInstanceTwice(t *testing.T) {
-	addr, err := findAvailableAddress()
+	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
+	tcpAddr := testutil.GetAvailableLocalAddress(t)
 
 	sink := new(exportertest.SinkTraceExporter)
 	rcvr, err := newReceiver(
@@ -83,6 +85,11 @@ func TestCantStartAnInstanceTwice(t *testing.T) {
 			NetAddr: confignet.NetAddr{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
+			},
+			ProxyServer: &proxy.Config{
+				TCPAddr: confignet.TCPAddr{
+					Endpoint: tcpAddr,
+				},
 			},
 		},
 		sink,
@@ -100,8 +107,9 @@ func TestCantStartAnInstanceTwice(t *testing.T) {
 }
 
 func TestCantStopAnInstanceTwice(t *testing.T) {
-	addr, err := findAvailableAddress()
+	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
+	tcpAddr := testutil.GetAvailableLocalAddress(t)
 
 	sink := new(exportertest.SinkTraceExporter)
 	rcvr, err := newReceiver(
@@ -109,6 +117,11 @@ func TestCantStopAnInstanceTwice(t *testing.T) {
 			NetAddr: confignet.NetAddr{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
+			},
+			ProxyServer: &proxy.Config{
+				TCPAddr: confignet.TCPAddr{
+					Endpoint: tcpAddr,
+				},
 			},
 		},
 		sink,
@@ -160,8 +173,9 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 }
 
 func createAndOptionallyStartReceiver(t *testing.T, start bool) (string, component.TraceReceiver, *observer.ObservedLogs) {
-	addr, err := findAvailableAddress()
+	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
+	tcpAddr := testutil.GetAvailableLocalAddress(t)
 
 	sink := new(exportertest.SinkTraceExporter)
 	logger, recorded := logSetup()
@@ -170,6 +184,11 @@ func createAndOptionallyStartReceiver(t *testing.T, start bool) (string, compone
 			NetAddr: confignet.NetAddr{
 				Endpoint:  addr,
 				Transport: udppoller.Transport,
+			},
+			ProxyServer: &proxy.Config{
+				TCPAddr: confignet.TCPAddr{
+					Endpoint: tcpAddr,
+				},
 			},
 		},
 		sink,
@@ -184,10 +203,10 @@ func createAndOptionallyStartReceiver(t *testing.T, start bool) (string, compone
 	return addr, rcvr, recorded
 }
 
-// findAvailableAddress finds an available local address+port and returns it.
+// findAvailableUDPAddress finds an available local address+port and returns it.
 // There might be race condition on the address returned by this function if
 // there's some other code that grab the address before we can listen on it.
-func findAvailableAddress() (string, error) {
+func findAvailableUDPAddress() (string, error) {
 	addr, err := net.ResolveUDPAddr(udppoller.Transport, "localhost:0")
 	if err != nil {
 		return "", err
