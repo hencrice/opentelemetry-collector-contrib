@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
@@ -60,7 +61,7 @@ func TestLoadConfig(t *testing.T) {
 				Endpoint:  "0.0.0.0:5678",
 				Transport: "udp",
 			},
-			ProxyServer: &proxyServer{
+			ProxyServer: &proxy.Config{
 				TCPAddr: confignet.TCPAddr{
 					Endpoint: "0.0.0.0:2000",
 				},
@@ -89,7 +90,7 @@ func TestLoadConfig(t *testing.T) {
 				Endpoint:  "0.0.0.0:2000",
 				Transport: "udp",
 			},
-			ProxyServer: &proxyServer{
+			ProxyServer: &proxy.Config{
 				TCPAddr: confignet.TCPAddr{
 					Endpoint: "0.0.0.0:1234",
 				},

@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/receiver/receiverhelper"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/proxy"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/udppoller"
 )
 
@@ -51,7 +52,7 @@ func createDefaultConfig() configmodels.Receiver {
 			Endpoint:  "0.0.0.0:2000",
 			Transport: udppoller.Transport,
 		},
-		ProxyServer: &proxyServer{
+		ProxyServer: &proxy.Config{
 			TCPAddr: confignet.TCPAddr{
 				Endpoint: "0.0.0.0:2000",
 			},
