@@ -2,10 +2,22 @@
 package proxy
 
 import (
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"time"
+
+	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"github.com/aws/aws-xray-daemon/daemon/conn"
+	"github.com/prometheus/common/log"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/config/configtls"
+	"go.uber.org/zap"
 )
 
+// Config is the configuration for the local TCP proxy server.
 type Config struct {
 	// endpoint is the TCP address and port on which this receiver listens for
 	// calls from the X-Ray SDK and relays them to the AWS X-Ray backend to
@@ -37,6 +49,11 @@ type Config struct {
 	LocalMode *bool `mapstructure:"local_mode"`
 }
 
+type server struct {
+	*http.Server
+	log *zap.Logger
+}
+
 // const (
 // 	service    = "xray"
 // 	connHeader = "Connection"
@@ -50,80 +67,79 @@ type Server interface {
 
 // NewServer returns a local TCP server that proxies requests to AWS
 // backend using the given credentials.
-// func NewServer(cfg *cfg.Config, awsCfg *aws.Config, sess *session.Session) (*Server, error) {
-// 	_, err := net.ResolveTCPAddr("tcp", cfg.Socket.TCPAddress)
-// 	if err != nil {
-// 		log.Errorf("%v", err)
-// 		os.Exit(1)
-// 	}
-// 	endPoint, er := getServiceEndpoint(awsCfg)
+func NewServer(cfg *Config, logger *zap.Logger) (*Server, error) {
+	_, err := net.ResolveTCPAddr("tcp", cfg.Endpoint)
+	if err != nil {
+		return nil, err
+	}
 
-// 	if er != nil {
-// 		return nil, fmt.Errorf("%v", er)
-// 	}
+	endPoint, er := getServiceEndpoint(awsCfg)
 
-// 	log.Infof("HTTP Proxy server using X-Ray Endpoint : %v", endPoint)
+	if er != nil {
+		return nil, fmt.Errorf("%v", er)
+	}
 
-// 	// Parse url from endpoint
-// 	url, err := url.Parse(endPoint)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("unable to parse xray endpoint: %v", err)
-// 	}
+	log.Infof("HTTP Proxy server using X-Ray Endpoint : %v", endPoint)
 
-// 	signer := &v4.Signer{
-// 		Credentials: sess.Config.Credentials,
-// 	}
+	// Parse url from endpoint
+	url, err := url.Parse(endPoint)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse xray endpoint: %v", err)
+	}
 
-// 	transport := conn.ProxyServerTransport(cfg)
+	signer := &v4.Signer{
+		Credentials: sess.Config.Credentials,
+	}
 
-// 	// Reverse proxy handler
-// 	handler := &httputil.ReverseProxy{
-// 		Transport: transport,
+	transport := conn.ProxyServerTransport(cfg)
 
-// 		// Handler for modifying and forwarding requests
-// 		Director: func(req *http.Request) {
-// 			if req != nil && req.URL != nil {
-// 				log.Debugf("Received request on HTTP Proxy server : %s", req.URL.String())
-// 			} else {
-// 				log.Debug("Request/Request.URL received on HTTP Proxy server is nil")
-// 			}
+	// Reverse proxy handler
+	handler := &httputil.ReverseProxy{
+		Transport: transport,
 
-// 			// Remove connection header before signing request, otherwise the
-// 			// reverse-proxy will remove the header before forwarding to X-Ray
-// 			// resulting in a signed header being missing from the request.
-// 			req.Header.Del(connHeader)
+		// Handler for modifying and forwarding requests
+		Director: func(req *http.Request) {
+			if req != nil && req.URL != nil {
+				log.Debugf("Received request on HTTP Proxy server : %s", req.URL.String())
+			} else {
+				log.Debug("Request/Request.URL received on HTTP Proxy server is nil")
+			}
 
-// 			// Set req url to xray endpoint
-// 			req.URL.Scheme = url.Scheme
-// 			req.URL.Host = url.Host
-// 			req.Host = url.Host
+			// Remove connection header before signing request, otherwise the
+			// reverse-proxy will remove the header before forwarding to X-Ray
+			// resulting in a signed header being missing from the request.
+			req.Header.Del(connHeader)
 
-// 			// Consume body and convert to io.ReadSeeker for signer to consume
-// 			body, err := consume(req.Body)
-// 			if err != nil {
-// 				log.Errorf("Unable to consume request body: %v", err)
+			// Set req url to xray endpoint
+			req.URL.Scheme = url.Scheme
+			req.URL.Host = url.Host
+			req.Host = url.Host
 
-// 				// Forward unsigned request
-// 				return
-// 			}
+			// Consume body and convert to io.ReadSeeker for signer to consume
+			body, err := consume(req.Body)
+			if err != nil {
+				log.Errorf("Unable to consume request body: %v", err)
 
-// 			// Sign request. signer.Sign() also repopulates the request body.
-// 			_, err = signer.Sign(req, body, service, *awsCfg.Region, time.Now())
-// 			if err != nil {
-// 				log.Errorf("Unable to sign request: %v", err)
-// 			}
-// 		},
-// 	}
+				// Forward unsigned request
+				return
+			}
 
-// 	server := &http.Server{
-// 		Addr:    cfg.Socket.TCPAddress,
-// 		Handler: handler,
-// 	}
+			// Sign request. signer.Sign() also repopulates the request body.
+			_, err = signer.Sign(req, body, service, *awsCfg.Region, time.Now())
+			if err != nil {
+				log.Errorf("Unable to sign request: %v", err)
+			}
+		},
+	}
 
-// 	p := &Server{server}
-
-// 	return p, nil
-// }
+	return &server{
+		Server: &http.Server{
+			Addr:    cfg.Socket.TCPAddress,
+			Handler: handler,
+		},
+		log: logger,
+	}, nil
+}
 
 // // consume readsAll() the body and creates a new io.ReadSeeker from the content. v4.Signer
 // // requires an io.ReadSeeker to be able to sign requests. May return a nil io.ReadSeeker.
