@@ -2,15 +2,20 @@
 package proxy
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
-	"github.com/aws/aws-xray-daemon/daemon/conn"
 	"github.com/prometheus/common/log"
 	"go.opentelemetry.io/collector/config/confignet"
 	"go.opentelemetry.io/collector/config/configtls"
@@ -49,15 +54,10 @@ type Config struct {
 	LocalMode *bool `mapstructure:"local_mode"`
 }
 
-type server struct {
-	*http.Server
-	log *zap.Logger
-}
-
-// const (
-// 	service    = "xray"
-// 	connHeader = "Connection"
-// )
+const (
+	service    = "xray"
+	connHeader = "Connection"
+)
 
 // Server represents HTTP server.
 type Server interface {
@@ -72,26 +72,33 @@ func NewServer(cfg *Config, logger *zap.Logger) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	endPoint, er := getServiceEndpoint(awsCfg)
-
-	if er != nil {
-		return nil, fmt.Errorf("%v", er)
+	if cfg.ProxyAddress != "" {
+		logger.Info("Using remote proxy: %s", zap.String("address", cfg.ProxyAddress))
 	}
 
-	log.Infof("HTTP Proxy server using X-Ray Endpoint : %v", endPoint)
+	awsCfg, sess, err := getAWSConfigSession(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	awsEndPoint, err := getServiceEndpoint(awsCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("HTTP proxy server using remote X-Ray endpoint", zap.String("value", awsEndPoint))
 
 	// Parse url from endpoint
-	url, err := url.Parse(endPoint)
+	url, err := url.Parse(awsEndPoint)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse xray endpoint: %v", err)
+		return nil, fmt.Errorf("unable to parse xray endpoint: %w", err)
 	}
 
 	signer := &v4.Signer{
 		Credentials: sess.Config.Credentials,
 	}
 
-	transport := conn.ProxyServerTransport(cfg)
+	transport := proxyServerTransport(cfg)
 
 	// Reverse proxy handler
 	handler := &httputil.ReverseProxy{
@@ -100,9 +107,9 @@ func NewServer(cfg *Config, logger *zap.Logger) (*Server, error) {
 		// Handler for modifying and forwarding requests
 		Director: func(req *http.Request) {
 			if req != nil && req.URL != nil {
-				log.Debugf("Received request on HTTP Proxy server : %s", req.URL.String())
+				logger.Debug("Received request on HTTP proxy server", zap.String("URL", req.URL.String()))
 			} else {
-				log.Debug("Request/Request.URL received on HTTP Proxy server is nil")
+				logger.Debug("Request/Request.URL received on HTTP proxy server is nil")
 			}
 
 			// Remove connection header before signing request, otherwise the
@@ -118,7 +125,7 @@ func NewServer(cfg *Config, logger *zap.Logger) (*Server, error) {
 			// Consume body and convert to io.ReadSeeker for signer to consume
 			body, err := consume(req.Body)
 			if err != nil {
-				log.Errorf("Unable to consume request body: %v", err)
+				log.Error("Unable to consume request body", zap.Error(err))
 
 				// Forward unsigned request
 				return
@@ -127,66 +134,52 @@ func NewServer(cfg *Config, logger *zap.Logger) (*Server, error) {
 			// Sign request. signer.Sign() also repopulates the request body.
 			_, err = signer.Sign(req, body, service, *awsCfg.Region, time.Now())
 			if err != nil {
-				log.Errorf("Unable to sign request: %v", err)
+				log.Error("Unable to sign request", zap.Error(err))
 			}
 		},
 	}
 
-	return &server{
-		Server: &http.Server{
-			Addr:    cfg.Socket.TCPAddress,
-			Handler: handler,
-		},
-		log: logger,
+	return &http.Server{
+		Addr:    cfg.Endpoint,
+		Handler: handler,
 	}, nil
 }
 
-// // consume readsAll() the body and creates a new io.ReadSeeker from the content. v4.Signer
-// // requires an io.ReadSeeker to be able to sign requests. May return a nil io.ReadSeeker.
-// func consume(body io.ReadCloser) (io.ReadSeeker, error) {
-// 	var buf []byte
+// getServiceEndpoint returns X-Ray service endpoint.
+// It is guaranteed that awsCfg config instance is non-nil and the region value is non nil or non empty in awsCfg object.
+// Currently the caller takes care of it.
+func getServiceEndpoint(awsCfg *aws.Config) (string, error) {
+	if awsCfg.Endpoint == nil || *awsCfg.Endpoint == "" {
+		if awsCfg.Region == nil || *awsCfg.Region == "" {
+			return "", errors.New("unable to generate endpoint from region with nil value")
+		}
+		resolved, err := endpoints.DefaultResolver().EndpointFor(service, *awsCfg.Region, setResolverConfig())
+		return resolved.URL, err
+	}
+	return *awsCfg.Endpoint, nil
+}
 
-// 	// Return nil ReadSeeker if body is nil
-// 	if body == nil {
-// 		return nil, nil
-// 	}
+// consume readsAll() the body and creates a new io.ReadSeeker from the content. v4.Signer
+// requires an io.ReadSeeker to be able to sign requests. May return a nil io.ReadSeeker.
+func consume(body io.ReadCloser) (io.ReadSeeker, error) {
+	var buf []byte
 
-// 	// Consume body
-// 	buf, err := ioutil.ReadAll(body)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	// Return nil ReadSeeker if body is nil
+	if body == nil {
+		return nil, nil
+	}
 
-// 	return bytes.NewReader(buf), nil
-// }
+	// Consume body
+	buf, err := ioutil.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
 
-// // Serve starts server.
-// func (s *Server) Serve() {
-// 	log.Infof("Starting proxy http server on %s", s.Addr)
-// 	s.ListenAndServe()
-// }
+	return bytes.NewReader(buf), nil
+}
 
-// // Close stops server.
-// func (s *Server) Close() {
-// 	s.Server.Close()
-// }
-
-// // getServiceEndpoint returns X-Ray service endpoint.
-// // It is guaranteed that awsCfg config instance is non-nil and the region value is non nil or non empty in awsCfg object.
-// // Currently the caller takes care of it.
-// func getServiceEndpoint(awsCfg *aws.Config) (string, error) {
-// 	if awsCfg.Endpoint == nil || *awsCfg.Endpoint == "" {
-// 		if awsCfg.Region == nil || *awsCfg.Region == "" {
-// 			return "", errors.New("unable to generate endpoint from region with nil value")
-// 		}
-// 		resolved, err := endpoints.DefaultResolver().EndpointFor(service, *awsCfg.Region, setResolverConfig())
-// 		return resolved.URL, err
-// 	}
-// 	return *awsCfg.Endpoint, nil
-// }
-
-// func setResolverConfig() func(*endpoints.Options) {
-// 	return func(p *endpoints.Options) {
-// 		p.ResolveUnknownService = true
-// 	}
-// }
+func setResolverConfig() func(*endpoints.Options) {
+	return func(p *endpoints.Options) {
+		p.ResolveUnknownService = true
+	}
+}

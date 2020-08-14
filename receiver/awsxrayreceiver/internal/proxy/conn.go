@@ -12,6 +12,8 @@ package conn
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -22,7 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
-	"github.com/aws/aws-xray-daemon/pkg/cfg"
+	"go.uber.org/zap"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
@@ -34,41 +36,104 @@ import (
 )
 
 const (
-	// this is not configurable by customers in the X-Ray daemon
-	// so keep it hardcoded
+	// these are not configurable by customers in the X-Ray daemon
+	// so keep them hardcoded:
+	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L195
 	requestTimeout = 2 * time.Second
+	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L118
+	idleConnTimeout = 30 * time.Second
+	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L119
+	maxIdleConnsPerHost = 2
+
+	awsRegionEnvVar                   = "AWS_REGION"
+	ecsContainerMetadataEnabledEnvVar = "ECS_ENABLE_CONTAINER_METADATA"
+	ecsMetadataFileEnvVar             = "ECS_CONTAINER_METADATA_FILE"
+
+	httpsProxyEnvVar = "HTTPS_PROXY"
 )
 
-type connAttr interface {
-	newAWSSession(roleArn string, region string) *session.Session
-	getEC2Region(s *session.Session) (string, error)
+var newAWSSession = func(roleArn string, region string) (*session.Session, error) {
+	var s *session.Session
+	var err error
+	if roleArn == "" {
+		s = getDefaultSession()
+	} else {
+		stsCreds := getSTSCreds(region, roleArn)
+
+		s, err = session.NewSession(&aws.Config{
+			Credentials: stsCreds,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
 }
 
-// Conn implements connAttr interface.
-type Conn struct{}
-
-func (c *Conn) getEC2Region(s *session.Session) (string, error) {
+var getEC2Region = func(s *session.Session) (string, error) {
 	return ec2metadata.New(s).Region()
 }
 
-const (
-	STSEndpointPrefix         = "https://sts."
-	STSEndpointSuffix         = ".amazonaws.com"
-	STSAwsCnPartitionIDSuffix = ".amazonaws.com.cn" // AWS China partition.
-)
+func getAWSConfigSession(c *Config, log *zap.Logger) (*aws.Config, *session.Session, error) {
+	var awsRegion string
+	http, err := getNewHTTPClient(c.TLSSetting.Insecure, c.ProxyAddress)
+	if err != nil {
+		return nil, nil, err
+	}
+	regionEnv := os.Getenv(awsRegionEnvVar)
+	if c.Region == "" && regionEnv != "" {
+		awsRegion = regionEnv
+		log.Debug("Fetch region from environment variables", zap.String("value", awsRegion))
+	} else if c.Region != "" {
+		awsRegion = c.Region
+		log.Debug("Fetch region from config file", zap.String("value", awsRegion))
+	} else if !c.LocalMode {
+		awsRegion, err = getRegionFromECSMetadata()
+		if err != nil {
+			log.Debug("Unable to fetch region from ECS metadata", zap.Error(err))
+			awsRegion, err = getEC2Region(getDefaultSession())
+			if err != nil {
+				log.Debug("Unable to fetch region from EC2 metadata", zap.Error(err))
+			} else {
+				log.Debugf("Fetch region from ec2 metadata", zap.String("value", awsRegion))
+			}
+		} else {
+			log.Debug("Fetch region from ECS metadata file", zap.String("value", awsRegion))
+		}
 
-func getNewHTTPClient(noVerify bool, proxyAddress string) *http.Client {
-	log.Debugf("Using proxy address: %v", proxyAddress)
+	}
+	if awsRegion == "" {
+		return nil, nil, errors.New("cannot fetch region variable from config file, environment variables, ecs metadata, or ec2 metadata.")
+	}
+
+	sess, err := newAWSSession(c.RoleARN, awsRegion)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &aws.Config{
+		Region:                 aws.String(awsRegion),
+		DisableParamValidation: aws.Bool(true),
+		MaxRetries:             aws.Int(2),
+		Endpoint:               aws.String(c.AWSEndpoint),
+		HTTPClient:             http,
+	}, sess
+}
+
+func getNewHTTPClient(insecure bool, proxyAddress *string) (*http.Client, error) {
 	tls := &tls.Config{
-		InsecureSkipVerify: noVerify,
+		InsecureSkipVerify: insecure,
 	}
 
 	finalProxyAddress := getProxyAddress(proxyAddress)
-	proxyURL := getProxyURL(finalProxyAddress)
+	proxyURL, err := getProxyURL(finalProxyAddress)
+	if err != nil {
+		return nil, err
+	}
 	transport := &http.Transport{
-		MaxIdleConnsPerHost: maxIdle,
-		TLSClientConfig:     tls,
-		Proxy:               http.ProxyURL(proxyURL),
+		TLSClientConfig: tls,
+		Proxy:           http.ProxyURL(proxyURL),
 	}
 
 	// is not enabled by default as we configure TLSClientConfig for supporting SSL to data plane.
@@ -76,111 +141,66 @@ func getNewHTTPClient(noVerify bool, proxyAddress string) *http.Client {
 	http2.ConfigureTransport(transport)
 	http := &http.Client{
 		Transport: transport,
-		Timeout:   time.Second * time.Duration(requestTimeout),
+		Timeout:   requestTimeout,
 	}
-	return http
+	return http, nil
 }
 
 func getProxyAddress(proxyAddress string) string {
 	var finalProxyAddress string
 	if proxyAddress != "" {
 		finalProxyAddress = proxyAddress
-	} else if proxyAddress == "" && os.Getenv("HTTPS_PROXY") != "" {
-		finalProxyAddress = os.Getenv("HTTPS_PROXY")
+	} else if proxyAddress == "" && os.Getenv(httpsProxyEnvVar) != "" {
+		finalProxyAddress = os.Getenv(httpsProxyEnvVar)
 	} else {
 		finalProxyAddress = ""
 	}
 	return finalProxyAddress
 }
 
-func getProxyURL(finalProxyAddress string) *url.URL {
+func getProxyURL(finalProxyAddress string) (*url.URL, error) {
 	var proxyURL *url.URL
 	var err error
 	if finalProxyAddress != "" {
 		proxyURL, err = url.Parse(finalProxyAddress)
 		if err != nil {
-			log.Errorf("Bad proxy URL: %v", err)
-			os.Exit(1)
+			return nil, err
 		}
 	} else {
 		proxyURL = nil
 	}
-	return proxyURL
+	return proxyURL, nil
 }
 
-func getRegionFromECSMetadata() string {
-	var ecsMetadataEnabled string
-	var metadataFilePath string
-	var metadataFile []byte
-	var dat map[string]interface{}
-	var taskArn []string
-	var err error
+func getRegionFromECSMetadata() (string, error) {
 	var region string
-	region = ""
-	ecsMetadataEnabled = os.Getenv("ECS_ENABLE_CONTAINER_METADATA")
+
+	ecsMetadataEnabled := os.Getenv(ecsContainerMetadataEnabledEnvVar)
 	ecsMetadataEnabled = strings.ToLower(ecsMetadataEnabled)
 	if ecsMetadataEnabled == "true" {
-		metadataFilePath = os.Getenv("ECS_CONTAINER_METADATA_FILE")
-		metadataFile, err = ioutil.ReadFile(metadataFilePath)
+		metadataFilePath := os.Getenv(ecsMetadataFileEnvVar)
+		metadataFile, err := ioutil.ReadFile(metadataFilePath)
 		if err != nil {
-			log.Errorf("Unable to open ECS metadata file: %v\n", err)
+			return "", fmt.Errorf("unable to open ECS metadata file, path: %s, error: %w",
+				metadataFilePath, err)
 		} else {
+			var dat map[string]interface{}
 			if err := json.Unmarshal(metadataFile, &dat); err != nil {
-				log.Errorf("Unable to read ECS metadatafile contents: %v", err)
+				return "", fmt.Errorf("unable to read ECS metadatafile contents, path: %s, error: %w",
+					metadataFilePath, err)
 			} else {
-				taskArn = strings.Split(dat["TaskARN"].(string), ":")
+				taskArn := strings.Split(dat["TaskARN"].(string), ":")
 				region = taskArn[3]
-				log.Debugf("Fetch region %v from ECS metadata file", region)
 			}
 		}
 	}
-	return region
+	return region, nil
 }
 
-func getAWSConfigSession(c *Config) (*aws.Config, *session.Session) {
-	var s *session.Session
-	var err error
-	var awsRegion string
-	http := getNewHTTPClient(cfg.ParameterConfigValue.Processor.MaxIdleConnPerHost, cfg.ParameterConfigValue.Processor.RequestTimeout, *c.NoVerifySSL, c.ProxyAddress)
-	regionEnv := os.Getenv("AWS_REGION")
-	if region == "" && regionEnv != "" {
-		awsRegion = regionEnv
-		log.Debugf("Fetch region %v from environment variables", awsRegion)
-	} else if region != "" {
-		awsRegion = region
-		log.Debugf("Fetch region %v from commandline/config file", awsRegion)
-	} else if !noMetadata {
-		awsRegion = getRegionFromECSMetadata()
-		if awsRegion == "" {
-			es := getDefaultSession()
-			awsRegion, err = cn.getEC2Region(es)
-			if err != nil {
-				log.Errorf("Unable to fetch region from EC2 metadata: %v\n", err)
-			} else {
-				log.Debugf("Fetch region %v from ec2 metadata", awsRegion)
-			}
-		}
-	}
-	if awsRegion == "" {
-		log.Errorf("Cannot fetch region variable from config file, environment variables, ecs metadata, or ec2 metadata.")
-		os.Exit(1)
-	}
-	s = cn.newAWSSession(roleArn, awsRegion)
-
-	config := &aws.Config{
-		Region:                 aws.String(awsRegion),
-		DisableParamValidation: aws.Bool(true),
-		MaxRetries:             aws.Int(2),
-		Endpoint:               aws.String(c.Endpoint),
-		HTTPClient:             http,
-	}
-	return config, s
-}
-
-// ProxyServerTransport configures HTTP transport for TCP Proxy Server.
-func ProxyServerTransport(config *cfg.Config) *http.Transport {
+// proxyServerTransport configures HTTP transport for TCP Proxy Server.
+func proxyServerTransport(config *Config) *http.Transport {
 	tls := &tls.Config{
-		InsecureSkipVerify: *config.NoVerifySSL,
+		InsecureSkipVerify: config.TLSSetting.Insecure,
 	}
 
 	proxyAddr := getProxyAddress(config.ProxyAddress)
@@ -190,8 +210,7 @@ func ProxyServerTransport(config *cfg.Config) *http.Transport {
 	idleConnTimeout := time.Duration(config.ProxyServer.IdleConnTimeout) * time.Second
 
 	transport := &http.Transport{
-		MaxIdleConns:        config.ProxyServer.MaxIdleConns,
-		MaxIdleConnsPerHost: config.ProxyServer.MaxIdleConnsPerHost,
+		MaxIdleConnsPerHost: maxIdleConnsPerHost,
 		IdleConnTimeout:     idleConnTimeout,
 		Proxy:               http.ProxyURL(proxyURL),
 		TLSClientConfig:     tls,
@@ -206,25 +225,7 @@ func ProxyServerTransport(config *cfg.Config) *http.Transport {
 	return transport
 }
 
-func (c *Conn) newAWSSession(roleArn string, region string) *session.Session {
-	var s *session.Session
-	var err error
-	if roleArn == "" {
-		s = getDefaultSession()
-	} else {
-		stsCreds := getSTSCreds(region, roleArn)
-
-		s, err = session.NewSession(&aws.Config{
-			Credentials: stsCreds,
-		})
-
-		if err != nil {
-			log.Errorf("Error in creating session object : %v\n.", err)
-			os.Exit(1)
-		}
-	}
-	return s
-}
+// TODO more to updates
 
 // getSTSCreds gets STS credentials from regional endpoint. ErrCodeRegionDisabledException is received if the
 // STS regional endpoint is disabled. In this case STS credentials are fetched from STS primary regional endpoint
