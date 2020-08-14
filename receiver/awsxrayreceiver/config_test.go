@@ -18,7 +18,6 @@ import (
 	"path"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +72,6 @@ func TestLoadConfig(t *testing.T) {
 				Region:      "",
 				RoleARN:     "",
 				AWSEndpoint: "",
-				LocalMode:   aws.Bool(false),
 			},
 		},
 		r1)
@@ -102,7 +100,7 @@ func TestLoadConfig(t *testing.T) {
 				Region:      "us-west-1",
 				RoleARN:     "arn:aws:iam::123456789012:role/awesome_role",
 				AWSEndpoint: "https://another.aws.endpoint.com",
-				LocalMode:   aws.Bool(true),
+				LocalMode:   true,
 			},
 		},
 		r2)
