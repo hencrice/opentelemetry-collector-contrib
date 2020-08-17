@@ -16,6 +16,7 @@ package proxy
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -316,7 +317,7 @@ func TestGetProxyAddressPriority(t *testing.T) {
 	assert.Equal(t, "https://127.0.0.1:9999", getProxyAddress("https://127.0.0.1:9999"), "Expect function return value to be same with input")
 }
 
-func TestGetPartition1(t *testing.T) {
+func TestGetPartition(t *testing.T) {
 	p := getPartition("us-east-1")
 	assert.Equal(t, endpoints.AwsPartitionID, p)
 
@@ -330,7 +331,7 @@ func TestGetPartition1(t *testing.T) {
 	assert.Equal(t, "", p)
 }
 
-func TestGetSTSRegionalEndpoint1(t *testing.T) {
+func TestGetSTSRegionalEndpoint(t *testing.T) {
 	p := getSTSRegionalEndpoint("us-east-1")
 	assert.Equal(t, "https://sts.us-east-1.amazonaws.com", p)
 
@@ -342,4 +343,94 @@ func TestGetSTSRegionalEndpoint1(t *testing.T) {
 
 	p = getPartition("XYZ")
 	assert.Equal(t, "", p)
+}
+
+func TestNewSessionCreationFailed(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+
+	// manipulate env vars so that session.NewSession() fails
+	os.Setenv("AWS_SDK_LOAD_CONFIG", "true")
+	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "invalid")
+
+	_, err := newAWSSession("", "dontCare", zap.NewNop())
+	assert.Error(t, err, "expected failure")
+}
+
+func TestGetSTSCredsFailed(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+
+	// manipulate env vars so that session.NewSession() fails
+	os.Setenv("AWS_SDK_LOAD_CONFIG", "true")
+	os.Setenv("AWS_STS_REGIONAL_ENDPOINTS", "invalid")
+
+	_, err := newAWSSession("ROLEARN", "us-west-2", zap.NewNop())
+	assert.Error(t, err, "expected failure")
+}
+
+func TestProxyServerTransportInvalidProxyAddr(t *testing.T) {
+	_, err := proxyServerTransport(&Config{
+		ProxyAddress: "invalid\n",
+	})
+	assert.Error(t, err, "expected error")
+	assert.Contains(t, err.Error(), "invalid control character in URL")
+}
+
+func TestProxyServerTransportHappyCase(t *testing.T) {
+	_, err := proxyServerTransport(&Config{
+		ProxyAddress: "",
+	})
+	assert.NoError(t, err, "no expected error")
+}
+
+func TestGetSTSCredsFromPrimaryRegionEndpoint(t *testing.T) {
+	const expectedRoleARN = "a role ARN"
+	called := false
+	fake := &stsCalls{
+		log: zap.NewNop(),
+		getSTSCredsFromRegionEndpoint: func(_ *zap.Logger, _ *session.Session, region, roleArn string) *credentials.Credentials {
+			assert.Equal(t, region, endpoints.UsEast1RegionID, "expected region differs")
+			assert.Equal(t, roleArn, expectedRoleARN, "expected role ARN differs")
+			called = true
+			return nil
+		},
+	}
+	_, err := fake.getSTSCredsFromPrimaryRegionEndpoint(nil, expectedRoleARN, "us-west-2")
+	assert.True(t, called, "getSTSCredsFromRegionEndpoint should be called")
+	assert.NoError(t, err, "no expected error")
+
+	called = false
+	fake.getSTSCredsFromRegionEndpoint = func(_ *zap.Logger, _ *session.Session, region, roleArn string) *credentials.Credentials {
+		assert.Equal(t, region, endpoints.CnNorth1RegionID, "expected region differs")
+		assert.Equal(t, roleArn, expectedRoleARN, "expected role ARN differs")
+		called = true
+		return nil
+	}
+	_, err = fake.getSTSCredsFromPrimaryRegionEndpoint(nil, expectedRoleARN, "cn-north-1")
+	assert.True(t, called, "getSTSCredsFromRegionEndpoint should be called")
+	assert.NoError(t, err, "no expected error")
+
+	called = false
+	fake.getSTSCredsFromRegionEndpoint = func(_ *zap.Logger, _ *session.Session, region, roleArn string) *credentials.Credentials {
+		assert.Equal(t, region, endpoints.UsGovWest1RegionID, "expected region differs")
+		assert.Equal(t, roleArn, expectedRoleARN, "expected role ARN differs")
+		called = true
+		return nil
+	}
+	_, err = fake.getSTSCredsFromPrimaryRegionEndpoint(nil, expectedRoleARN, "us-gov-east-1")
+	assert.True(t, called, "getSTSCredsFromRegionEndpoint should be called")
+	assert.NoError(t, err, "no expected error")
+
+	called = false
+	fake.getSTSCredsFromRegionEndpoint = func(_ *zap.Logger, _ *session.Session, region, roleArn string) *credentials.Credentials {
+		called = true
+		return nil
+	}
+	invalidRegion := "invalid region"
+	_, err = fake.getSTSCredsFromPrimaryRegionEndpoint(nil, expectedRoleARN, invalidRegion)
+	assert.False(t, called, "getSTSCredsFromRegionEndpoint should not be called")
+	assert.EqualError(t, err,
+		fmt.Sprintf("unrecognized AWS region: %s, or partition: ", invalidRegion),
+		"expected error message")
 }

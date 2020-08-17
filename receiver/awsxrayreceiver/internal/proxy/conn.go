@@ -36,7 +36,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/prometheus/common/log"
 	"go.uber.org/zap"
-	"golang.org/x/net/http2"
 )
 
 const (
@@ -47,7 +46,7 @@ const (
 	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L118
 	idleConnTimeout = 30 * time.Second
 	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L119
-	maxIdleConnsPerHost = 2
+	remoteProxyMaxIdleConnsPerHost = 2
 
 	awsRegionEnvVar                   = "AWS_REGION"
 	ecsContainerMetadataEnabledEnvVar = "ECS_ENABLE_CONTAINER_METADATA"
@@ -61,7 +60,7 @@ const (
 )
 
 var newAWSSession = func(roleArn string, region string, log *zap.Logger) (*session.Session, error) {
-	sts := &stsCalls{log: log}
+	sts := &stsCalls{log: log, getSTSCredsFromRegionEndpoint: getSTSCredsFromRegionEndpoint}
 
 	if roleArn == "" {
 		sess, err := session.NewSession()
@@ -91,12 +90,10 @@ var getEC2Region = func(s *session.Session) (string, error) {
 }
 
 func getAWSConfigSession(c *Config, logger *zap.Logger) (*aws.Config, *session.Session, error) {
-	http, err := getNewHTTPClient(c.TLSSetting.Insecure, c.ProxyAddress)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var awsRegion string
+	var (
+		awsRegion string
+		err       error
+	)
 	regionEnv := os.Getenv(awsRegionEnvVar)
 	if c.Region == "" && regionEnv != "" {
 		awsRegion = regionEnv
@@ -137,33 +134,7 @@ func getAWSConfigSession(c *Config, logger *zap.Logger) (*aws.Config, *session.S
 		DisableParamValidation: aws.Bool(true),
 		MaxRetries:             aws.Int(2),
 		Endpoint:               aws.String(c.AWSEndpoint),
-		HTTPClient:             http,
 	}, sess, nil
-}
-
-func getNewHTTPClient(insecure bool, proxyAddress string) (*http.Client, error) {
-	tls := &tls.Config{
-		InsecureSkipVerify: insecure,
-	}
-
-	finalProxyAddress := getProxyAddress(proxyAddress)
-	proxyURL, err := getProxyURL(finalProxyAddress)
-	if err != nil {
-		return nil, err
-	}
-	transport := &http.Transport{
-		TLSClientConfig: tls,
-		Proxy:           http.ProxyURL(proxyURL),
-	}
-
-	// is not enabled by default as we configure TLSClientConfig for supporting SSL to data plane.
-	// http2.ConfigureTransport will setup transport layer to use HTTP2
-	http2.ConfigureTransport(transport)
-	http := &http.Client{
-		Transport: transport,
-		Timeout:   requestTimeout,
-	}
-	return http, nil
 }
 
 func getProxyAddress(proxyAddress string) string {
@@ -231,7 +202,7 @@ func proxyServerTransport(config *Config) (*http.Transport, error) {
 	}
 
 	return &http.Transport{
-		MaxIdleConnsPerHost: maxIdleConnsPerHost,
+		MaxIdleConnsPerHost: remoteProxyMaxIdleConnsPerHost,
 		IdleConnTimeout:     idleConnTimeout,
 		Proxy:               http.ProxyURL(proxyURL),
 		TLSClientConfig:     tls,
@@ -245,7 +216,8 @@ func proxyServerTransport(config *Config) (*http.Transport, error) {
 }
 
 type stsCalls struct {
-	log *zap.Logger
+	log                           *zap.Logger
+	getSTSCredsFromRegionEndpoint func(log *zap.Logger, sess *session.Session, region, roleArn string) *credentials.Credentials
 }
 
 // getSTSCreds gets STS credentials fist from the regional endpoint, then from the primary
@@ -256,7 +228,7 @@ func (s *stsCalls) getSTSCreds(region string, roleArn string) (*credentials.Cred
 		return nil, err
 	}
 
-	stsCred := s.getSTSCredsFromRegionEndpoint(sess, region, roleArn)
+	stsCred := s.getSTSCredsFromRegionEndpoint(s.log, sess, region, roleArn)
 	// Make explicit call to fetch credentials.
 	_, err = stsCred.Get()
 	if err != nil {
@@ -277,14 +249,14 @@ func (s *stsCalls) getSTSCreds(region string, roleArn string) (*credentials.Cred
 // getSTSCredsFromRegionEndpoint fetches STS credentials for provided roleARN from regional endpoint.
 // AWS STS recommends that you provide both the Region and endpoint when you make calls to a Regional endpoint.
 // Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_enable-regions.html#id_credentials_temp_enable-regions_writing_code
-func (s *stsCalls) getSTSCredsFromRegionEndpoint(sess *session.Session, region string, roleArn string) *credentials.Credentials {
+var getSTSCredsFromRegionEndpoint = func(log *zap.Logger, sess *session.Session, region string, roleArn string) *credentials.Credentials {
 	regionalEndpoint := getSTSRegionalEndpoint(region)
 	// if regionalEndpoint is "", the STS endpoint is Global endpoint for classic regions except ap-east-1 - (HKG)
 	// for other opt-in regions, region value will create STS regional endpoint.
 	// This will be only in the case, if provided region is not present in aws_regions.go
 	c := &aws.Config{Region: aws.String(region), Endpoint: &regionalEndpoint}
 	st := sts.New(sess, c)
-	s.log.Info("STS endpoint to use", zap.String("endpoint", st.Endpoint))
+	log.Info("STS endpoint to use", zap.String("endpoint", st.Endpoint))
 	return stscreds.NewCredentialsWithClient(st, roleArn)
 }
 
@@ -294,13 +266,13 @@ func (s *stsCalls) getSTSCredsFromPrimaryRegionEndpoint(sess *session.Session, r
 	partitionID := getPartition(region)
 	switch partitionID {
 	case endpoints.AwsPartitionID:
-		return s.getSTSCredsFromRegionEndpoint(sess, endpoints.UsEast1RegionID, roleArn), nil
+		return s.getSTSCredsFromRegionEndpoint(s.log, sess, endpoints.UsEast1RegionID, roleArn), nil
 	case endpoints.AwsCnPartitionID:
-		return s.getSTSCredsFromRegionEndpoint(sess, endpoints.CnNorth1RegionID, roleArn), nil
+		return s.getSTSCredsFromRegionEndpoint(s.log, sess, endpoints.CnNorth1RegionID, roleArn), nil
 	case endpoints.AwsUsGovPartitionID:
-		return s.getSTSCredsFromRegionEndpoint(sess, endpoints.UsGovWest1RegionID, roleArn), nil
+		return s.getSTSCredsFromRegionEndpoint(s.log, sess, endpoints.UsGovWest1RegionID, roleArn), nil
 	default:
-		return nil, fmt.Errorf("unrecognized AWS partition, %s", partitionID)
+		return nil, fmt.Errorf("unrecognized AWS region: %s, or partition: %s", region, partitionID)
 	}
 }
 

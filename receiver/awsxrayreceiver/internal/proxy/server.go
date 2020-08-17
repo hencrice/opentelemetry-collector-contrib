@@ -30,7 +30,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
-	"github.com/prometheus/common/log"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +52,7 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 		return nil, err
 	}
 	if cfg.ProxyAddress != "" {
-		logger.Info("Using remote proxy: %s", zap.String("address", cfg.ProxyAddress))
+		logger.Debug("Using remote proxy: %s", zap.String("address", cfg.ProxyAddress))
 	}
 
 	awsCfg, sess, err := getAWSConfigSession(cfg, logger)
@@ -108,7 +107,7 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 			// Consume body and convert to io.ReadSeeker for signer to consume
 			body, err := consume(req.Body)
 			if err != nil {
-				log.Error("Unable to consume request body", zap.Error(err))
+				logger.Error("Unable to consume request body", zap.Error(err))
 
 				// Forward unsigned request
 				return
@@ -117,7 +116,7 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 			// Sign request. signer.Sign() also repopulates the request body.
 			_, err = signer.Sign(req, body, service, *awsCfg.Region, time.Now())
 			if err != nil {
-				log.Error("Unable to sign request", zap.Error(err))
+				logger.Error("Unable to sign request", zap.Error(err))
 			}
 		},
 	}
