@@ -41,14 +41,13 @@ import (
 const (
 	// these are not configurable by customers in the X-Ray daemon
 	// so keep them hardcoded:
-	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L195
-	requestTimeout = 2 * time.Second
 	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L118
 	idleConnTimeout = 30 * time.Second
 	// https://github.com/aws/aws-xray-daemon/blob/master/pkg/cfg/cfg.go#L119
 	remoteProxyMaxIdleConnsPerHost = 2
 
 	awsRegionEnvVar                   = "AWS_REGION"
+	awsDefaultRegionEnvVar            = "AWS_DEFAULT_REGION"
 	ecsContainerMetadataEnabledEnvVar = "ECS_ENABLE_CONTAINER_METADATA"
 	ecsMetadataFileEnvVar             = "ECS_CONTAINER_METADATA_FILE"
 
@@ -68,21 +67,20 @@ var newAWSSession = func(roleArn string, region string, log *zap.Logger) (*sessi
 			return nil, err
 		}
 		return sess, nil
-	} else {
-		stsCreds, err := sts.getSTSCreds(region, roleArn)
-		if err != nil {
-			return nil, err
-		}
-
-		sess, err := session.NewSession(&aws.Config{
-			Credentials: stsCreds,
-		})
-
-		if err != nil {
-			return nil, err
-		}
-		return sess, nil
 	}
+	stsCreds, err := sts.getSTSCreds(region, roleArn)
+	if err != nil {
+		return nil, err
+	}
+
+	sess, err := session.NewSession(&aws.Config{
+		Credentials: stsCreds,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
 }
 
 var getEC2Region = func(s *session.Session) (string, error) {
@@ -94,7 +92,11 @@ func getAWSConfigSession(c *Config, logger *zap.Logger) (*aws.Config, *session.S
 		awsRegion string
 		err       error
 	)
-	regionEnv := os.Getenv(awsRegionEnvVar)
+	regionEnv := os.Getenv(awsDefaultRegionEnvVar)
+	if regionEnv == "" {
+		regionEnv = os.Getenv(awsRegionEnvVar)
+	}
+
 	if c.Region == "" && regionEnv != "" {
 		awsRegion = regionEnv
 		logger.Debug("Fetch region from environment variables", zap.String("region", awsRegion))
@@ -130,10 +132,11 @@ func getAWSConfigSession(c *Config, logger *zap.Logger) (*aws.Config, *session.S
 	}
 
 	return &aws.Config{
-		Region:                 aws.String(awsRegion),
-		DisableParamValidation: aws.Bool(true),
-		MaxRetries:             aws.Int(2),
-		Endpoint:               aws.String(c.AWSEndpoint),
+		Region:                        aws.String(awsRegion),
+		DisableParamValidation:        aws.Bool(true),
+		MaxRetries:                    aws.Int(2),
+		Endpoint:                      aws.String(c.AWSEndpoint),
+		CredentialsChainVerboseErrors: aws.Bool(true),
 	}, sess, nil
 }
 
@@ -155,7 +158,7 @@ func getProxyURL(finalProxyAddress string) (*url.URL, error) {
 	if finalProxyAddress != "" {
 		proxyURL, err = url.Parse(finalProxyAddress)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse proxy URL: %w", err)
 		}
 	} else {
 		proxyURL = nil
@@ -174,16 +177,15 @@ func getRegionFromECSMetadata() (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("unable to open ECS metadata file, path: %s, error: %w",
 				metadataFilePath, err)
-		} else {
-			var dat map[string]interface{}
-			if err := json.Unmarshal(metadataFile, &dat); err != nil {
-				return "", fmt.Errorf("unable to read ECS metadata file content, path: %s, error: %w",
-					metadataFilePath, err)
-			} else {
-				taskArn := strings.Split(dat["TaskARN"].(string), ":")
-				region = taskArn[3]
-			}
 		}
+		var dat map[string]interface{}
+		if err := json.Unmarshal(metadataFile, &dat); err != nil {
+			return "", fmt.Errorf("unable to read ECS metadata file content, path: %s, error: %w",
+				metadataFilePath, err)
+		}
+		taskArn := strings.Split(dat["TaskARN"].(string), ":")
+		region = taskArn[3]
+
 		return region, nil
 	}
 	return "", errors.New("ECS metadata endpoint is inaccessible")

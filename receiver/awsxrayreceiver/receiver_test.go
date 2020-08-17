@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,11 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/proxy"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/awsxrayreceiver/internal/udppoller"
+)
+
+const (
+	defaultRegionEnvName = "AWS_DEFAULT_REGION"
+	mockRegion           = "us-west-2"
 )
 
 func TestConsumerCantBeNil(t *testing.T) {
@@ -97,6 +103,10 @@ func TestPollerCreationFailed(t *testing.T) {
 }
 
 func TestCantStartAnInstanceTwice(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+	os.Setenv(defaultRegionEnvName, mockRegion)
+
 	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
@@ -129,6 +139,10 @@ func TestCantStartAnInstanceTwice(t *testing.T) {
 }
 
 func TestCantStopAnInstanceTwice(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+	os.Setenv(defaultRegionEnvName, mockRegion)
+
 	addr, err := findAvailableUDPAddress()
 	assert.NoError(t, err, "there should be address available")
 	tcpAddr := testutil.GetAvailableLocalAddress(t)
@@ -178,6 +192,10 @@ func TestCantStopAnInstanceTwice(t *testing.T) {
 // TODO: Update this test to assert on the format of traces
 // once the transformation from X-Ray segments -> OTLP is done.
 func TestSegmentsPassedToConsumer(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+	os.Setenv(defaultRegionEnvName, mockRegion)
+
 	addr, rcvr, _ := createAndOptionallyStartReceiver(t, true)
 	defer rcvr.Shutdown(context.Background())
 
@@ -195,6 +213,10 @@ func TestSegmentsPassedToConsumer(t *testing.T) {
 }
 
 func TestPollerCloseError(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+	os.Setenv(defaultRegionEnvName, mockRegion)
+
 	_, rcvr, _ := createAndOptionallyStartReceiver(t, false)
 	mPoller := &mockPoller{closeErr: errors.New("mockPollerCloseErr")}
 	rcvr.(*xrayReceiver).poller = mPoller
@@ -204,6 +226,10 @@ func TestPollerCloseError(t *testing.T) {
 }
 
 func TestProxyCloseError(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+	os.Setenv(defaultRegionEnvName, mockRegion)
+
 	_, rcvr, _ := createAndOptionallyStartReceiver(t, false)
 	mProxy := &mockProxy{closeErr: errors.New("mockProxyCloseErr")}
 	rcvr.(*xrayReceiver).poller = &mockPoller{}
@@ -213,6 +239,10 @@ func TestProxyCloseError(t *testing.T) {
 }
 
 func TestBothPollerAndProxyCloseError(t *testing.T) {
+	env := stashEnv()
+	defer restoreEnv(env)
+	os.Setenv(defaultRegionEnvName, mockRegion)
+
 	_, rcvr, _ := createAndOptionallyStartReceiver(t, false)
 	mPoller := &mockPoller{closeErr: errors.New("mockPollerCloseErr")}
 	mProxy := &mockProxy{closeErr: errors.New("mockProxyCloseErr")}

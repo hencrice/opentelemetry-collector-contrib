@@ -52,7 +52,7 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 		return nil, err
 	}
 	if cfg.ProxyAddress != "" {
-		logger.Debug("Using remote proxy: %s", zap.String("address", cfg.ProxyAddress))
+		logger.Debug("Using remote proxy", zap.String("address", cfg.ProxyAddress))
 	}
 
 	awsCfg, sess, err := getAWSConfigSession(cfg, logger)
@@ -68,9 +68,9 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 	logger.Info("HTTP proxy server using remote X-Ray endpoint", zap.String("value", awsEndPoint))
 
 	// Parse url from endpoint
-	url, err := url.Parse(awsEndPoint)
+	awsURL, err := url.Parse(awsEndPoint)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse xray endpoint: %w", err)
+		return nil, fmt.Errorf("unable to parse AWS service endpoint: %w", err)
 	}
 
 	signer := &v4.Signer{
@@ -89,9 +89,7 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 		// Handler for modifying and forwarding requests
 		Director: func(req *http.Request) {
 			if req != nil && req.URL != nil {
-				logger.Debug("Received request on HTTP proxy server", zap.String("URL", req.URL.String()))
-			} else {
-				logger.Debug("Request/Request.URL received on HTTP proxy server is nil")
+				logger.Debug("Received request on X-Ray receiver TCP proxy server", zap.String("URL", req.URL.String()))
 			}
 
 			// Remove connection header before signing request, otherwise the
@@ -100,9 +98,9 @@ func NewServer(cfg *Config, logger *zap.Logger) (Server, error) {
 			req.Header.Del(connHeader)
 
 			// Set req url to xray endpoint
-			req.URL.Scheme = url.Scheme
-			req.URL.Host = url.Host
-			req.Host = url.Host
+			req.URL.Scheme = awsURL.Scheme
+			req.URL.Host = awsURL.Host
+			req.Host = awsURL.Host
 
 			// Consume body and convert to io.ReadSeeker for signer to consume
 			body, err := consume(req.Body)

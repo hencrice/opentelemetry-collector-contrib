@@ -21,14 +21,13 @@ import (
 	"strings"
 	"testing"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
-
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 var ec2Region = "us-west-2"
@@ -176,7 +175,6 @@ func TestRegionFromEC2(t *testing.T) {
 
 	awsCfg, s, err := getAWSConfigSession(DefaultConfig(), logger)
 	assert.NoError(t, err, "getAWSConfigSession should not error out")
-	assert.Equal(t, *expectedSession.Config.Credentials, *s.Config.Credentials, "same")
 	assert.Equal(t, expectedSession, s, "mock session is not overridden")
 	assert.Equal(t, ec2Region, *awsCfg.Region, "region value fetched from ec2-metadata service")
 
